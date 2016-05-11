@@ -53,8 +53,59 @@ void drawEpiline(Point2f p, int i0, int i1) {
   //waitKey();
 }
 
+struct Feature {
+  float r, c;
+  int type;
+};
+
+void detectHaris(Mat &im) {
+  int blockSize = 2;
+  int apertureSize = 3;
+  double k = 0.001;
+  Mat gray;
+
+  cvtColor(im, gray, CV_BGR2GRAY);
+  Mat dst = Mat::zeros(gray.size(), CV_32FC1);
+  Mat dst_norm, dst_norm_scaled;
+  /// Detecting corners
+  cornerHarris( gray, dst, blockSize, apertureSize, k, BORDER_DEFAULT );
+
+  Mat g1, g2, result;
+  GaussianBlur(gray, g1, Size(1,1), 0);
+  GaussianBlur(gray, g2, Size(3,3), 0);
+  result = g1 - g2;
+  imshow("dog", abs(result) * 10);
+
+  // NMS
+  int nmswindow = 1;
+  forMat (i, j, dst) {
+    for (int k = -nmswindow; k <= nmswindow; k++) {
+      
+    }
+  }
+  //dilate(dst, dst, getElement(2));
+
+  //normalize( dst, dst_norm, 0, 1, NORM_MINMAX, CV_32FC1, Mat() );
+  printType(dst);
+  dst_norm = dst;
+  int count = 0;
+  forMat (i, j, dst_norm) {
+    if (dst_norm.at<float>(i, j) > 0.00001) {
+      dst_norm.at<float>(i, j) = 1;
+      count++;
+    }
+  }
+  printf("%d\n", count);
+  //convertScaleAbs( dst_norm, dst_norm_scaled );
+
+  //imshow("gray", gray);
+  imshow("dst", dst_norm);
+  //imshow("s", dst_norm_scaled);
+  waitKey();
+}
+
 void mouse(int event, int x, int y, int flags, void* param) {
-  drawEpiline(Point2f(x, y), 0, 20);
+  drawEpiline(Point2f(x, y), 0, 4);
 }
 
 void loadDataset() {
@@ -84,6 +135,9 @@ void loadDataset() {
   }
   fclose(fi);
   imshow("img0", frames[0].img);
+
+  detectHaris(frames[0].img);
+
   setMouseCallback("img0", mouse);
   waitKey();
 
