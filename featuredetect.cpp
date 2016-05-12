@@ -104,6 +104,22 @@ void detectHaris(Mat &im) {
   waitKey();
 }
 
+void detectHarris(Mat &im, vector<KeyPoint> &kp) {
+  Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(5000, 0.0001, 1, 3, true, 0.0001);
+  Mat gray;
+  cvtColor(im, gray, CV_BGR2GRAY);
+  detector->detect(gray, kp);
+}
+
+void displayKeyPoint(Mat &im, vector<KeyPoint> &kp) {
+  Mat tmp = im.clone();
+  for (int i = 0; i < kp.size(); i++) {
+    circle(tmp, kp[i].pt, 1, Scalar(0, 0, 255), -1);
+  }
+  imshow("keypoints", tmp);
+  waitKey();
+}
+
 void mouse(int event, int x, int y, int flags, void* param) {
   drawEpiline(Point2f(x, y), 0, 4);
 }
@@ -136,7 +152,10 @@ void loadDataset() {
   fclose(fi);
   imshow("img0", frames[0].img);
 
-  detectHaris(frames[0].img);
+  //detectHaris(frames[0].img);
+  vector<KeyPoint> kp;
+  detectHarris(frames[0].img, kp);
+  displayKeyPoint(frames[0].img, kp);
 
   setMouseCallback("img0", mouse);
   waitKey();
