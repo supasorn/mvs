@@ -32,31 +32,66 @@ void drawEpiline(Point2f p, int i0, int i1) {
   std::vector<Vec3f> lines;
   computeCorrespondEpilines(ps, 1, F, lines);
 
+  int top = 0;
+  Point2f vtop;
+  int bottom = 0;
+  Point2f vbottom;
+  Size sz = frames[i0].img.size();
+
+  if (lines[0][0] != 0) {
+    vtop.x = -lines[0][2] / lines[0][0];
+    vtop.y = 0;
+    top = vtop.x >= 0 && vtop.x <= sz.width;
+    vbottom.x = -(lines[0][2] + lines[0][1] * sz.height) / lines[0][0];
+    vbottom.y = sz.height;
+    bottom = vbottom.x >= 0 && vbottom.x <= sz.width;
+  }
+
+  int left = 0;
+  Point2f vleft;
+  int right = 0;
+  Point2f vright;
+
+  if (lines[0][1] != 0) {
+    vleft.x = 0;
+    vleft.y = -lines[0][2] / lines[0][1];
+    left = vleft.y >= 0 && vleft.y <= sz.height;
+
+    vright.x = sz.width;
+    vright.y = -(lines[0][2] + lines[0][0] * sz.width) / lines[0][1];
+    right = vright.y >= 0 && vright.y <= sz.height;
+  }
+
+  int flat[4] = {left, right, top, bottom};
+  Point2f vflat[4] = {vleft, vright, vtop, vbottom};
+
+  int first = -1;
+  float mx = 0;
+  int second = -1;
+  for (int i = 0; i < 4; i++) {
+    float tmp;
+    if (first == -1) {
+      if (flat[i]) 
+        first = i;
+    } else if (flat[i] && (tmp = norm(vflat[first] - vflat[i])) > mx) {
+      mx = tmp;
+      second = i;
+    }
+  }
   Scalar color(255, 0, 0);
 
   Mat a = frames[i0].img.clone();
   Mat b = frames[i1].img.clone();
-  if (fabs(lines[0][0]) > fabs(lines[0][1])) {
-    line(b,
-        Point(-lines[0][2] / lines[0][0], 0),
-        Point(-(lines[0][2]+lines[0][1]*a.rows) / lines[0][0] ,a.rows),
-        color);
-  } else {
-    line(b,
-        Point(0,-lines[0][2]/lines[0][1]),
-        Point(a.cols,-(lines[0][2]+lines[0][0]*a.cols)/lines[0][1]),
-        color);
+  if (second != -1) {
+    line(b, vflat[first], vflat[second], color);
   }
+
+  printf("%d %d %d %d\n", top, bottom, left, right);
   circle(a, ps[0], 1, color, -1, CV_AA);
   imshow("img0", a);
   imshow("img1", b);
   //waitKey();
 }
-
-struct Feature {
-  float r, c;
-  int type;
-};
 
 void detectHaris(Mat &im) {
   int blockSize = 2;
@@ -111,13 +146,16 @@ void detectHarris(Mat &im, vector<KeyPoint> &kp) {
   detector->detect(gray, kp);
 }
 
-void displayKeyPoint(Mat &im, vector<KeyPoint> &kp) {
+void displayKeyPoint(string name, Mat &im, vector<KeyPoint> &kp) {
   Mat tmp = im.clone();
   for (int i = 0; i < kp.size(); i++) {
     circle(tmp, kp[i].pt, 1, Scalar(0, 0, 255), -1);
   }
-  imshow("keypoints", tmp);
-  waitKey();
+  imshow(name, tmp);
+}
+
+void matching(Frame &f0, vector<KeyPoint> &kp0, Frame &f1, vector<KeyPoint> &kp1) {
+  
 }
 
 void mouse(int event, int x, int y, int flags, void* param) {
@@ -153,9 +191,14 @@ void loadDataset() {
   imshow("img0", frames[0].img);
 
   //detectHaris(frames[0].img);
-  vector<KeyPoint> kp;
-  detectHarris(frames[0].img, kp);
-  displayKeyPoint(frames[0].img, kp);
+  vector<KeyPoint> kp[2];
+  detectHarris(frames[0].img, kp[0]);
+  displayKeyPoint("f0", frames[0].img, kp[0]);
+
+  detectHarris(frames[1].img, kp[1]);
+  displayKeyPoint("f1", frames[1].img, kp[1]);
+
+  waitKey();
 
   setMouseCallback("img0", mouse);
   waitKey();
