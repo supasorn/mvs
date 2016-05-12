@@ -63,7 +63,7 @@ void drawEpiline(Point2f p, int i0, int i1) {
   }
 
   int flat[4] = {left, right, top, bottom};
-  Point2f vflat[4] = {vleft, vright, vtop, vbottom};
+  Point2f *vflat[4] = {&vleft, &vright, &vtop, &vbottom};
 
   int first = -1;
   float mx = 0;
@@ -73,7 +73,7 @@ void drawEpiline(Point2f p, int i0, int i1) {
     if (first == -1) {
       if (flat[i]) 
         first = i;
-    } else if (flat[i] && (tmp = norm(vflat[first] - vflat[i])) > mx) {
+    } else if (flat[i] && (tmp = norm(*vflat[first] - *vflat[i])) > mx) {
       mx = tmp;
       second = i;
     }
@@ -83,7 +83,7 @@ void drawEpiline(Point2f p, int i0, int i1) {
   Mat a = frames[i0].img.clone();
   Mat b = frames[i1].img.clone();
   if (second != -1) {
-    line(b, vflat[first], vflat[second], color);
+    line(b, *vflat[first], *vflat[second], color);
   }
 
   printf("%d %d %d %d\n", top, bottom, left, right);
