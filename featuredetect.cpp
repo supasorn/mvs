@@ -1,5 +1,6 @@
 #define UTIL_CERES
 #include "utilities.h"
+#include "viz.h"
 using namespace cv;
 using namespace std;
 DEFINE_string(dataset, "/home/supasorn/mvs/datasets/templeRing", "a");
@@ -9,6 +10,8 @@ struct Frame {
   string name;
   Mat k, r, t;
   Mat img;
+  Mat camera; // camera center
+  Mat u, v; // right and down vector
 };
 vector<Frame> frames;
 
@@ -162,6 +165,19 @@ void mouse(int event, int x, int y, int flags, void* param) {
   drawEpiline(Point2f(x, y), 0, 4);
 }
 
+void display() {
+  glBegin(GL_POINTS);
+  glColor3ub(0, 255, 0);
+  glVertex3f(0, 0, 0);
+  for (int i = 0; i < frames.size(); i++) {
+    glColor3ub(255, 0, 0);
+    glVertex3f(frames[i].camera.at<double>(0, 0), 
+               frames[i].camera.at<double>(1, 0), 
+               frames[i].camera.at<double>(2, 0));
+  }
+  glEnd();
+}
+
 void loadDataset() {
   FILE *fi = fopen((FLAGS_dataset + "/templeR_par.txt").c_str(), "r");
   printf("%d\n", fi);
@@ -183,12 +199,17 @@ void loadDataset() {
     for (int k = 0; k < 3; k++) 
       fscanf(fi, " %lf", &frames[i].t.at<double>(0, 0) + k);
 
+    frames[i].camera = - frames[i].r.t() * frames[i].t;
     //cout << frames[i].k << endl;
     //imshow("fram", frames[i].img);
     //waitKey();
   }
   fclose(fi);
   imshow("img0", frames[0].img);
+  
+
+  Viz::setDisplayCallback(display);
+  Viz::startWindow(800, 800);
 
   //detectHaris(frames[0].img);
   vector<KeyPoint> kp[2];

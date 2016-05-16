@@ -23,7 +23,7 @@ FIND_PACKAGE(OpenGL REQUIRED )
 
 message("OPENCV: ${OpenCV_VERSION}")
 #link_directories(/usr/lib64 ${PCL_LIBRARY_DIRS})
-include_directories(${INCLUDE_DIRECTORIES} ../research/OpticalFlow/mex ${CERES_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ../research/utils/) 
+include_directories(${INCLUDE_DIRECTORIES} ../research/OpticalFlow/mex ${CERES_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS} ../research/utils/ ../research/) 
 
 add_definitions(-D_LINUX_MAC -D_OPENCV -w)
 
@@ -42,7 +42,9 @@ add_library (pyramid ../research/utils/pyramid.cpp)
 add_library (utilities ../research/utils/utilities.cpp)
 target_link_libraries(utilities pyramid ${OpenCV_LIBS} ${OPTICALFLOW} ${EXTRA_LIBS})
 
+add_library (libviz ../research/viz.cpp)
+
 add_library (raster ../research/utils/raster.cpp)
 
 add_executable (featuredetect featuredetect.cpp)
-target_link_libraries (featuredetect ceres utilities) 
+target_link_libraries (featuredetect ceres utilities libviz ply.so) 
