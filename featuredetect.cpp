@@ -8,10 +8,15 @@ int n;
 
 struct Frame {
   string name;
-  Mat k, r, t;
+  // Projection Matrix = k * [r : t] = [kr : kt]
+  Mat k, r, t;  
+  Mat p;
+
   Mat img;
   Mat camera; // camera center
   Mat u, v; // right and down vector
+
+  Mat fourCorners;
 };
 vector<Frame> frames;
 
@@ -165,17 +170,36 @@ void mouse(int event, int x, int y, int flags, void* param) {
   drawEpiline(Point2f(x, y), 0, 4);
 }
 
+
 void display() {
+#define GLM(a) glVertex3f(frames[i].fourCorners.at<double>(0, a),  frames[i].fourCorners.at<double>(1, a),  frames[i].fourCorners.at<double>(2, a))
+#define GLC() glVertex3f(frames[i].camera.at<double>(0, 0), frames[i].camera.at<double>(1, 0), frames[i].camera.at<double>(2, 0))
+
   glBegin(GL_POINTS);
   glColor3ub(0, 255, 0);
   glVertex3f(0, 0, 0);
-  for (int i = 0; i < frames.size(); i++) {
-    glColor3ub(255, 0, 0);
-    glVertex3f(frames[i].camera.at<double>(0, 0), 
-               frames[i].camera.at<double>(1, 0), 
-               frames[i].camera.at<double>(2, 0));
-  }
   glEnd();
+  for (int i = 0; i < frames.size(); i++) {
+    glBegin(GL_POINTS);
+    glColor3ub(255, 0, 0);
+    GLC();
+    glEnd();
+
+    glBegin(GL_LINE_STRIP);
+    GLM(2);
+    GLM(3);
+    GLC();
+    GLM(2);
+    GLM(0);
+    GLC();
+    GLM(1);
+    GLM(3);
+    GLC();
+    GLM(0);
+    GLM(1);
+    glEnd();
+  }
+#undef GLM
 }
 
 void loadDataset() {
@@ -200,6 +224,23 @@ void loadDataset() {
       fscanf(fi, " %lf", &frames[i].t.at<double>(0, 0) + k);
 
     frames[i].camera = - frames[i].r.t() * frames[i].t;
+    //frames[i].p = frames[i].k *
+
+    // Let projection matrix = P = [F : B] where F is 3 x 3, B 3 x 1;
+    Mat F_ = frames[i].r.t() * frames[i].k.inv(); // F-1 = (kr)-1 = r^T k-1
+    Mat B = frames[i].k * frames[i].t;
+    // Solving Fx + B = [u; v; w] yielding x = F-1 (uvw - B).
+    
+    float x[4] = {0, 0, frames[i].img.cols - 1, frames[i].img.cols - 1};
+    float y[4] = {0, frames[i].img.rows - 1, 0, frames[i].img.rows - 1};
+    frames[i].fourCorners = Mat(3, 4, CV_64F);
+    for (int j = 0; j < 4; j++) {
+      float w = 0.1;
+      Mat uvw = (Mat_<double>(3, 1) << x[j] * w, y[j] * w, w);
+      Mat xyz = F_ * (uvw - B);
+      xyz.copyTo(frames[i].fourCorners(Rect(j, 0, 1, 3)));
+    }
+
     //cout << frames[i].k << endl;
     //imshow("fram", frames[i].img);
     //waitKey();
