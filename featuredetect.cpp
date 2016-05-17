@@ -164,7 +164,8 @@ void detectHaris(Mat &im) {
 }
 
 void detectHarris(Mat &im, vector<KeyPoint> &kp) {
-  Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(5000, 0.0001, 1, 3, true, 0.0001);
+  //Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(5000, 0.0001, 1, 3, true, 0.0001);
+  Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(2000, 0.0001, 1, 3, true, 0.0001);
   Mat gray;
   cvtColor(im, gray, CV_BGR2GRAY);
   detector->detect(gray, kp);
@@ -193,13 +194,12 @@ int getPatch(Mat &patch, Mat &im, Point2f &center, int patchSize) {
   return 0;
 }
 
-void testGeneratePoints() {
+void testGeneratePoints(int i0, int i1) {
   vector<KeyPoint> kp[2];
-  detectHarris(frames[0].img, kp[0]);
-  displayKeyPoint("f0", frames[0].img, kp[0]);
-
-  detectHarris(frames[1].img, kp[1]);
-  displayKeyPoint("f1", frames[1].img, kp[1]);
+  detectHarris(frames[i0].img, kp[0]);
+  //displayKeyPoint("f0", frames[0].img, kp[0]);
+  detectHarris(frames[i1].img, kp[1]);
+  //displayKeyPoint("f1", frames[1].img, kp[1]);
 
 
   vector<Point2f> ps;
@@ -207,7 +207,7 @@ void testGeneratePoints() {
     ps.push_back(kp[0][i].pt);
   }
   vector<Vec3f> lines;
-  getEpiLine(lines, frames[0], frames[1], ps);
+  getEpiLine(lines, frames[i0], frames[i1], ps);
   printf("%d\n", lines.size());
   Point2f p0, p1;
   Scalar color(255, 0, 0);
@@ -220,9 +220,9 @@ void testGeneratePoints() {
   for (int i = 0; i < lines.size(); i++) {
     printf("%d\n", i);
     Mat patch;
-    if (!getPatch(patch, frames[0].img, kp[0][i].pt, patchSize)) continue;
+    if (!getPatch(patch, frames[i0].img, kp[0][i].pt, patchSize)) continue;
 
-    if (getLineSegment(p0, p1, lines[i], frames[0].img.size())) {
+    if (getLineSegment(p0, p1, lines[i], frames[i0].img.size())) {
       //line(frames[1].img, p0, p1, color);
 
       double best = 1e10;
@@ -233,7 +233,7 @@ void testGeneratePoints() {
         Point2f in = p1 * t + p0 * (1 - t);
 
         Mat patch2;
-        if (!getPatch(patch2, frames[1].img, in, patchSize)) continue;
+        if (!getPatch(patch2, frames[i1].img, in, patchSize)) continue;
 
         Scalar diff = sum(abs(patch - patch2));
         if (diff[0] + diff[1] + diff[2] < best) {
@@ -252,7 +252,7 @@ void testGeneratePoints() {
         c1.push_back(bestPoint);
         //Vec3d tmp = frames[0].img.at<Vec3d>(kp[0][i].pt.y, kp[0][i].pt.x);
         //testColors.push_back(Point3f(tmp[0], tmp[1], tmp[2]));
-        testColors.push_back(Point3f(frames[0].img.at<Vec3b>(kp[0][i].pt.y, kp[0][i].pt.x)));
+        testColors.push_back(Point3f(frames[i0].img.at<Vec3b>(kp[0][i].pt.y, kp[0][i].pt.x)));
       }
 
       //imshow("patch", joinH(patch, bestPatch));
@@ -261,7 +261,7 @@ void testGeneratePoints() {
   }
   //vector<Point3f> tp;
   Mat tp;
-  triangulatePoints(frames[0].p, frames[1].p, c0, c1, tp);
+  triangulatePoints(frames[i0].p, frames[i1].p, c0, c1, tp);
   //printf("%d %d\n", tp.rows, tp.cols);
   //printType(tp);
   //printf("%f %f %f %f\n", tp.at<float>(0, 0),tp.at<float>(1, 0),tp.at<float>(2, 0),tp.at<float>(3, 0));
@@ -272,11 +272,10 @@ void testGeneratePoints() {
           tp.at<float>(1, i) / tp.at<float>(3, i),
           tp.at<float>(2, i) / tp.at<float>(3, i)
           ));
-    printf("%f %f %f\n", testPoints.back().x, testPoints.back().y, testPoints.back().z);
   }
 
-  imshow("f1", frames[1].img);
-  waitKey();
+  //imshow("f1", frames[1].img);
+  //waitKey();
 }
 void mouse(int event, int x, int y, int flags, void* param) {
   drawEpiline(Point2f(x, y), 0, 1);
@@ -377,7 +376,11 @@ void loadDataset() {
   }
   fclose(fi);
   imshow("img0", frames[0].img);
-  testGeneratePoints();
+  for (int i = 0; i < 47; i+=3) {
+    testGeneratePoints(i, i+1);
+  }
+  //testGeneratePoints(0, 1);
+  //testGeneratePoints(10, 11);
   
 
 
