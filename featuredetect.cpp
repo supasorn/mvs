@@ -119,6 +119,7 @@ void drawEpiline(Point2f p, int i0, int i1) {
 void detectHarris(Mat &im, vector<KeyPoint> &kp) {
   //Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(5000, 0.0001, 1, 3, true, 0.0001);
   Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(2000, 0.0001, 1, 3, true, 0.0001);
+  //Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(2000, 0.0001, 1, 3, true, 0.0001);
   Mat gray;
   cvtColor(im, gray, CV_BGR2GRAY);
   detector->detect(gray, kp);
@@ -329,8 +330,9 @@ void loadDataset() {
   }
   fclose(fi);
   imshow("img0", frames[0].img);
-  for (int i = 0; i < 47; i+=3) {
-    testGeneratePoints(i, i+1);
+  for (int i = 0; i < frames.size(); i++) {
+    if (i + 2 < frames.size())
+      testGeneratePoints(i, i+2);
   }
   //testGeneratePoints(0, 1);
   //testGeneratePoints(10, 11);
@@ -338,6 +340,7 @@ void loadDataset() {
 
 
   //detectHaris(frames[0].img);
+
 
   setMouseCallback("img0", mouse);
   waitKey();
