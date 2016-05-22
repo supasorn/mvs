@@ -9,7 +9,7 @@ SET(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -lpthread -pthread")
 #link_directories(/usr/local/lib)
 add_definitions(-fopenmp)
 add_definitions(-D__UBUNTU__)
-add_definitions(-std=c++0x)
+add_definitions(-std=c++11)
 #FIND_PACKAGE(CUDA)
 
 SET(CUDA_NVCC_FLAGS "-arch=sm_20")
@@ -18,7 +18,12 @@ message(${CMAKE_SYSTEM_VERSION})
 message(${CMAKE_CURRENT_SOURCE_DIR})
 
 FIND_PACKAGE(Ceres 1.8 REQUIRED)
+find_package( CGAL QUIET COMPONENTS  )
 FIND_PACKAGE(OpenGL REQUIRED )
+include( ${CGAL_USE_FILE} )
+include( CGAL_CreateSingleSourceCGALProgram )
+
+find_package( Boost REQUIRED )
 
 
 message("OPENCV: ${OpenCV_VERSION}")
@@ -48,3 +53,9 @@ add_library (raster ../research/utils/raster.cpp)
 
 add_executable (featuredetect featuredetect.cpp)
 target_link_libraries (featuredetect ceres utilities libviz ply.so) 
+
+add_executable (generatefeature generatefeature.cpp)
+target_link_libraries (generatefeature ceres utilities libviz ply.so) 
+
+add_executable (cgal cgal.cpp)
+target_link_libraries (cgal ceres utilities libviz ply.so) 
