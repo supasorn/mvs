@@ -11,13 +11,8 @@
 #include <iostream>
 #include <set>
 
-#include "viz.h"
 
-
-
-
-class VertexInfo {
-  public:
+struct VertexInfo {
   unsigned char col[3];
   std::set<int> cams;
   int n;
@@ -34,8 +29,7 @@ class VertexInfo {
   }
 };
 
-class TetraInfo {
-  public:
+struct TetraInfo {
   int id;
 };
 
@@ -119,27 +113,6 @@ void printFacet(DelaunayMesh::Delaunay::Facet f) {
 
 //typedef CGAL::Epick K;
 typedef CGAL::Simple_cartesian<double> K; // Could use Epick, but Simple_cartesian is supposed to be fastest.
-// custom point type
-struct My_point {
-    double m_x;
-    double m_y;
-    double m_z;
-    My_point(const double x,
-        const double y,
-        const double z)
-        : m_x(x), m_y(y), m_z(z) {}
-};
-// custom triangle type with
-// three pointers to points
-struct My_triangle {
-    My_point *m_pa;
-    My_point *m_pb;
-    My_point *m_pc;
-    My_triangle(My_point *pa,
-        My_point *pb,
-        My_point *pc)
-        : m_pa(pa), m_pb(pb), m_pc(pc) {}
-};
 
 struct TetraTriangle {
   Cell_handle ch;
@@ -148,8 +121,8 @@ struct TetraTriangle {
 
 };
 // the custom triangles are stored into a vector
-//typedef std::vector<My_triangle>::const_iterator Iterator;
 typedef std::vector<TetraTriangle>::const_iterator Iterator;
+
 // The following primitive provides the conversion facilities between
 // the custom triangle and point types and the CGAL ones
 struct My_triangle_primitive {
@@ -175,105 +148,33 @@ public:
     const Id& id() const { return m_pt; }
     // utility function to convert a custom 
     // point type to CGAL point type.
-    Point convert(const My_point *p) const {
-        return Point(p->m_x,p->m_y,p->m_z);
-    }
-
     Point convert(const DPoint &p) const {
         return Point(p[0], p[1], p[2]);
     }
-    /*
+    
     // on the fly conversion from the internal data to the CGAL types
     Datum datum() const {
-        return Datum(convert(m_pt->m_pa),
-            convert(m_pt->m_pb),
-            convert(m_pt->m_pc));
-    }
-    // returns a reference point which must be on the primitive
-    Point reference_point() const
-    { return convert(m_pt->m_pa); }*/
-    Datum datum() const {
-      auto v0 = m_pt->ch->vertex((m_pt->vi + 1) % 4);
-      auto v1 = m_pt->ch->vertex((m_pt->vi + 2) % 4);
-      auto v2 = m_pt->ch->vertex((m_pt->vi + 3) % 4);
+      const auto &v0 = m_pt->ch->vertex((m_pt->vi + 1) % 4);
+      const auto &v1 = m_pt->ch->vertex((m_pt->vi + 2) % 4);
+      const auto &v2 = m_pt->ch->vertex((m_pt->vi + 3) % 4);
       return Datum(convert(v0->point()), convert(v1->point()), convert(v2->point()));
     }
+    // returns a reference point which must be on the primitive
+    
     Point reference_point() const { 
-      auto v0 = m_pt->ch->vertex((m_pt->vi + 1) % 4);
-      auto p = v0->point();
+      const auto &p = m_pt->ch->vertex((m_pt->vi + 1) % 4)->point();
       return Point(p[0], p[1], p[2]);
     }
 };
 
 
-typedef K::FT FT;
 typedef K::Ray_3 Ray;
 typedef K::Line_3 Line;
 typedef K::Point_3 KPoint;
 typedef K::Triangle_3 Triangle;
-
-//typedef std::list<Triangle>::iterator Iterator;
-//typedef CGAL::AABB_triangle_primitive<K, Iterator> Primitive;
-//typedef CGAL::AABB_traits<K, Primitive> AABB_triangle_traits;
-//typedef CGAL::AABB_tree<AABB_triangle_traits> Tree;
-
 typedef CGAL::AABB_traits<K, My_triangle_primitive> My_AABB_traits;
 typedef CGAL::AABB_tree<My_AABB_traits> Tree;
-
 typedef Tree::Primitive_id Primitive_id;
-
-/*
-void testRay() {
-  My_point a(1, 0, 0);
-  My_point b(0, 1, 0);
-  My_point c(0, 0, 1);
-  My_point d(0, 0, 0);
-  std::vector<My_triangle> triangles;
-  triangles.push_back(My_triangle(&a, &b, &c));
-  triangles.push_back(My_triangle(&a, &b, &d));
-  triangles.push_back(My_triangle(&a, &d, &c));
-
-  //KPoint a(1.0, 0.0, 0.0);
-  //KPoint b(0.0, 1.0, 0.0);
-  //KPoint c(0.0, 0.0, 1.0);
-  //KPoint d(0.0, 0.0, 0.0);
-  //std::list<Triangle> triangles;
-  //triangles.push_back(Triangle(a,b,c));
-  //triangles.push_back(Triangle(a,b,d));
-  //triangles.push_back(Triangle(a,d,c));
-  //
-  Tree tree(triangles.begin(),triangles.end());
-
-  KPoint p0(0.4, 0.01, 0.4);
-  KPoint p1(0.5, 1, 0.5);
-  Ray ray_query(p0 ,p1);
-
-  std::list<Primitive_id> primitives;
-  tree.all_intersected_primitives(ray_query, std::back_inserter(primitives));
-  printf("%d\n", primitives.size());
-  for (auto i = primitives.begin(); i != primitives.end(); i++) {
-    auto triangle = *i;
-    //auto &p0 = triangle->vertex(0);
-    //auto &p1 = triangle->vertex(1);
-    //auto &p2 = triangle->vertex(2);
-    //printf("%f %f %f\n", p0[0], p0[1], p0[2]);
-    //printf("%f %f %f\n", p1[0], p1[1], p1[2]);
-    //printf("%f %f %f\n", p2[0], p2[1], p2[2]);
-    auto &p0 = triangle->m_pa;
-    auto &p1 = triangle->m_pb;
-    auto &p2 = triangle->m_pc;
-    printf("%f %f %f\n", p0->m_x, p0->m_y, p0->m_z);
-    printf("%f %f %f\n", p1->m_x, p1->m_y, p1->m_z);
-    printf("%f %f %f\n", p2->m_x, p2->m_y, p2->m_z);
-
-  }
-
-
-  std::cout << tree.number_of_intersected_primitives(ray_query)
-    << " intersections(s) with ray query" << std::endl;
-  // compute closest point and squared distance
-  exit(0);
-}*/
 
 Tree tree;
 
