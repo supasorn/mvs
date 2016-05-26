@@ -10,82 +10,31 @@
 
 #include <iostream>
 #include <set>
+#include "delaunay_mesh.h"
+#include "viz.h"
 
-
-struct VertexInfo {
-  unsigned char col[3];
-  std::set<int> cams;
-  int n;
-
-  VertexInfo() {
-    n = 1;
-  }
-
-  VertexInfo(unsigned char col0, unsigned char col1, unsigned char col2) {
-    n = 1;
-    col[0] = col0;
-    col[1] = col1;
-    col[2] = col2;
-  }
-};
-
-struct TetraInfo {
-  int id;
-};
-
-class DelaunayMesh {
-public:
-  typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-  typedef CGAL::Triangulation_vertex_base_with_info_3<VertexInfo, K> Vb;
-  typedef CGAL::Triangulation_cell_base_with_info_3<TetraInfo, K> Cb;
-  typedef CGAL::Triangulation_data_structure_3<Vb, Cb> Tds;
-  typedef CGAL::Delaunay_triangulation_3<K, Tds> Delaunay;
-
-  Delaunay d;
-
-  double DistanceSquared(const Delaunay::Point &p0, const Delaunay::Point &p1) {
-    double v[3] = {p0.x() - p1.x(), p0.y() - p1.y(), p0.z() - p1.z()};
-    return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-  }
-
-
-
-  void AddPoint(const Delaunay::Point &p, const VertexInfo &vi) {
-    auto v = d.nearest_vertex(p);
-    // Found a nearest vertex within merge_threshold distance.
-    if (d.is_vertex(v) && DistanceSquared(p, v->point()) < merge_threshold) {
-      // TODO(Aek): merge camera list
-      auto vp = v->point();
-      int n = v->info().n;
-      d.move(v, Delaunay::Point(
-            (p.x() + vp.x() * n) / (n + 1),
-            (p.y() + vp.y() * n) / (n + 1),
-            (p.z() + vp.z() * n) / (n + 1)));
-      v->info().n++;
-    } else {
-      auto v = d.insert(p);
-      v->info() = vi;
-    }
-
-  }
-
-private:
-  double merge_threshold = 0.005;
-};
-
-typedef DelaunayMesh::Delaunay::Point   DPoint;
-typedef DelaunayMesh::Tds::Cell_handle Cell_handle;
 DelaunayMesh dm;
-
-
 using namespace std;
 
+typedef DelaunayMesh::DPoint DPoint;
+typedef DelaunayMesh::Cell_handle Cell_handle;
+typedef DelaunayMesh::Tree::Primitive_id Primitive_id;
+typedef DelaunayMesh::VertexInfo VertexInfo;
 
+typedef DelaunayMesh::KSC::Ray_3 Ray;
+typedef DelaunayMesh::KSC::Line_3 Line;
+typedef DelaunayMesh::KSC::Point_3 KPoint;
+typedef DelaunayMesh::KSC::Segment_3 Segment;
+typedef DelaunayMesh::KSC::Triangle_3 Triangle;
+typedef DelaunayMesh::KSC::Intersect_3 Intersect;
+
+
+vector<Mat> camera;
 
 float rand1(float c = 1) {
   return c * (2.0 * rand() / RAND_MAX - 1);
 }
-void printPoint(DPoint &p) {
+void printPoint(DelaunayMesh::DPoint &p) {
   printf("%f %f %f\n", p.x(), p.y(), p.z());
 }
 
@@ -111,74 +60,8 @@ void printFacet(DelaunayMesh::Delaunay::Facet f) {
   printPoint(v2->point());
 }
 
-//typedef CGAL::Epick K;
-typedef CGAL::Simple_cartesian<double> K; // Could use Epick, but Simple_cartesian is supposed to be fastest.
 
-struct TetraTriangle {
-  Cell_handle ch;
-  int vi;
-  TetraTriangle(Cell_handle c, int vi) : ch(c), vi(vi) {}
-
-};
-// the custom triangles are stored into a vector
-typedef std::vector<TetraTriangle>::const_iterator Iterator;
-
-// The following primitive provides the conversion facilities between
-// the custom triangle and point types and the CGAL ones
-struct My_triangle_primitive {
-public:
-    // this is the type of data that the queries returns. For this example
-    // we imagine that, for some reasons, we do not want to store the iterators
-    // of the vector, but raw pointers. This is to show that the Id type
-    // does not have to be the same as the one of the input parameter of the 
-    // constructor.
-    //typedef const My_triangle* Id;
-    typedef const TetraTriangle* Id;
-    // CGAL types returned
-    typedef K::Point_3    Point; // CGAL 3D point type
-    typedef K::Triangle_3 Datum; // CGAL 3D triangle type
-private:
-    Id m_pt; // this is what the AABB tree stores internally
-public:
-    My_triangle_primitive() {} // default constructor needed
-    // the following constructor is the one that receives the iterators from the 
-    // iterator range given as input to the AABB_tree
-    My_triangle_primitive(Iterator it)
-        : m_pt(&(*it)) {}
-    const Id& id() const { return m_pt; }
-    // utility function to convert a custom 
-    // point type to CGAL point type.
-    Point convert(const DPoint &p) const {
-        return Point(p[0], p[1], p[2]);
-    }
-    
-    // on the fly conversion from the internal data to the CGAL types
-    Datum datum() const {
-      const auto &v0 = m_pt->ch->vertex((m_pt->vi + 1) % 4);
-      const auto &v1 = m_pt->ch->vertex((m_pt->vi + 2) % 4);
-      const auto &v2 = m_pt->ch->vertex((m_pt->vi + 3) % 4);
-      return Datum(convert(v0->point()), convert(v1->point()), convert(v2->point()));
-    }
-    // returns a reference point which must be on the primitive
-    
-    Point reference_point() const { 
-      const auto &p = m_pt->ch->vertex((m_pt->vi + 1) % 4)->point();
-      return Point(p[0], p[1], p[2]);
-    }
-};
-
-
-typedef K::Ray_3 Ray;
-typedef K::Line_3 Line;
-typedef K::Point_3 KPoint;
-typedef K::Triangle_3 Triangle;
-typedef CGAL::AABB_traits<K, My_triangle_primitive> My_AABB_traits;
-typedef CGAL::AABB_tree<My_AABB_traits> Tree;
-typedef Tree::Primitive_id Primitive_id;
-
-Tree tree;
-
-KPoint p0(0.1, 0.1, 0.1);
+KPoint p0(0, 0, 0);
 KPoint p1(2, 3, 4);
 vector<pair<Cell_handle, int> > intersected;
 
@@ -186,9 +69,9 @@ void display() {
   DelaunayMesh::Delaunay &d = dm.d;
   
   glBegin(GL_LINES);
+  
   glColor4ub(255, 255, 255, 80);
   for (auto it = d.finite_edges_begin(); it != d.finite_edges_end(); it++) {
-    //printf("%d\n", d.triangle(face));
     auto p0 = it->first->vertex(it->second)->point();
     auto p1 = it->first->vertex(it->third)->point();
     glVertex3f(p0.x(), p0.y(), p0.z());
@@ -198,13 +81,14 @@ void display() {
 
   for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
     auto p = it->point();
-    glPointSize(4 * it->info().n);
+    glPointSize(1 + 0.25 * it->info().n);
     glBegin(GL_POINTS);
-    glColor3ub(it->info().col[0], it->info().col[1], it->info().col[2]);
+    glColor3ub(0, 255, 0);
     glVertex3f(p.x(), p.y(), p.z());
     glEnd();
   }
 
+  
   glPointSize(10);
   glBegin(GL_POINTS);
   glColor3ub(0, 255, 0);
@@ -239,24 +123,19 @@ void init() {
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
+
 void RebuildTree() {
-  DelaunayMesh::Delaunay &d = dm.d;
-  std::vector<TetraTriangle> triangles;
-  for (auto it = d.finite_facets_begin(); it != d.finite_facets_end(); it++) {
-    triangles.push_back(TetraTriangle(it->first, it->second));
-  }
-  tree.clear();
-  tree.insert(triangles.begin(),triangles.end());
+  dm.BuildAABBTree();
 
   Ray ray_query(p0 ,p1);
 
   std::list<Primitive_id> primitives;
-  tree.all_intersected_primitives(ray_query, std::back_inserter(primitives));
-  
+  dm.RayIntersect(ray_query, primitives);
+
   intersected.clear();
   for (auto i = primitives.begin(); i != primitives.end(); i++) {
     auto triangle = *i;
-    intersected.push_back(make_pair(triangle->ch, triangle->vi));
+    intersected.push_back(make_pair(triangle->first, triangle->second));
   }
   
 }
@@ -264,23 +143,18 @@ void keyboard2(unsigned char key, int x, int y) {
   DelaunayMesh::Delaunay &d = dm.d;
   if (key == 'a') {
     float c = 0.5;
-    dm.AddPoint(DPoint(rand1(c), rand1(c), rand1(c)), VertexInfo(255, 0, 0));
+    dm.AddPoint(DPoint(rand1(c), rand1(c), rand1(c)), VertexInfo());
     RebuildTree();
   }
 }
 void test2() {
   float c = 0.5;
   DelaunayMesh::Delaunay &d = dm.d;
-  dm.AddPoint(DPoint(0, 0, 0), VertexInfo(255, 0, 0));
-  dm.AddPoint(DPoint(c, 0, 0), VertexInfo(255, 0, 0));
-  dm.AddPoint(DPoint(0, c, 0), VertexInfo(255, 0, 0));
-  dm.AddPoint(DPoint(0, 0, c), VertexInfo(255, 0, 0));
-  dm.AddPoint(DPoint(c, c, c), VertexInfo(255, 0, 0));
-  //d.insert(DPoint(0, 0, 0));
-  //d.insert(DPoint(c, 0, 0));
-  //d.insert(DPoint(0, c, 0));
-  //d.insert(DPoint(0, 0, c));
-  //d.insert(DPoint(c, c, c));
+  dm.AddPoint(DPoint(0, 0, 0), VertexInfo());
+  dm.AddPoint(DPoint(c, 0, 0), VertexInfo());
+  dm.AddPoint(DPoint(0, c, 0), VertexInfo());
+  dm.AddPoint(DPoint(0, 0, c), VertexInfo());
+  dm.AddPoint(DPoint(c, c, c), VertexInfo());
 
 
   int id = 0;
@@ -323,9 +197,112 @@ void test2() {
   Viz::setInitCallback(init);
   Viz::startWindow(800, 800);
 }
+
+
+void iterateAllRays() {
+  DelaunayMesh::Delaunay &d = dm.d;
+  std::list<Primitive_id> primitives;
+  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
+    auto p = it->point();
+    set<int> &cams = it->info().cams;
+    printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
+
+    KPoint p0 = KPoint(p.x(), p.y(), p.z());
+    for (int camId : cams) {
+      primitives.clear();
+      KPoint p1 = KPoint(camera[camId].at<double>(0, 0),
+                         camera[camId].at<double>(1, 0),
+                         camera[camId].at<double>(2, 0));
+      Ray ray_query(p0, p1);
+      dm.RayIntersect(ray_query, primitives);
+      printf("#intersects = %d\n", primitives.size());
+      for (auto i = primitives.begin(); i != primitives.end(); i++) {
+        auto triangle = *i;
+        printf(" tetra1: %d\n", triangle->first->info().id);
+        printf(" tetra2: %d\n", d.mirror_facet(*triangle).first->info().id);
+        
+        //auto &p0 = triangle->m_pa;
+        //auto &p1 = triangle->m_pb;
+        //auto &p2 = triangle->m_pc;
+        //printf("%f %f %f\n", p0->m_x, p0->m_y, p0->m_z);
+        //printf("%f %f %f\n", p1->m_x, p1->m_y, p1->m_z);
+        //printf("%f %f %f\n", p2->m_x, p2->m_y, p2->m_z);
+      }
+    }
+  }
+}
+
+void test3() {
+  DelaunayMesh::Delaunay &d = dm.d;
+
+  FILE *fi = fopen("point.bin", "rb");
+  int n; 
+  // Write the number of cameras, and cameras' centers.
+  fread(&n, sizeof(int), 1, fi);
+  printf("#cameras = %d\n", n);
+  camera.resize(n);
+  for (int i = 0; i < n; i++) {
+    camera[i] = Mat(3, 1, CV_64F);
+    fread(&camera[i].at<double>(0, 0), sizeof(double), 3, fi);
+  }
+
+  fread(&n, sizeof(int), 1, fi);
+  printf("#points = %d\n", n);
+  float p[3], c[3];
+  int vc[2];
+  for (int i = 0; i < n; i++) {
+    fread(p, sizeof(float), 3, fi); 
+    fread(c, sizeof(float), 3, fi); 
+    fread(vc, sizeof(int), 2, fi);
+
+    if (i % 100) continue;
+
+    dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
+    if (rand() % 60 == 0) {
+      p0 = KPoint(p[0], p[1], p[2]); 
+      p1 = KPoint(
+          camera[vc[0]].at<double>(0, 0),
+          camera[vc[0]].at<double>(1, 0),
+          camera[vc[0]].at<double>(2, 0));
+    }
+    
+  }
+
+  //RebuildTree();
+  dm.BuildAABBTree();
+  dm.AssignTetrahedronIds();
+
+  iterateAllRays();
+
+  Viz::setDisplayCallback(display);
+  Viz::setKeyboardCallback(keyboard2);
+  Viz::setInitCallback(init);
+  Viz::startWindow(800, 800);
+
+  fclose(fi);
+  printf("Done reading\n");
+}
 int main() {
   //testRay();
-  test2();
+  Ray ray_query(KPoint(0, 0, 0), KPoint(1, 1, 1));
+  //CGAL::cpp11::result_of<Intersect(Ray, Triangle)>::type pi = CGAL::intersection(ray_query, Triangle(KPoint(1, 0, 0), KPoint(0, 1, 0), KPoint(0, 0, 1)));
+  //auto pi = CGAL::intersection(ray_query, Triangle(KPoint(1, 0, 0), KPoint(0, 1, 0), KPoint(0, 0, 1)));
+  auto pi = CGAL::intersection(ray_query, Triangle(KPoint(0, 0, 0), KPoint(1, 1, 1), KPoint(1, 0, 0)));
+  if (pi) {
+    if (const Segment* s = boost::get<Segment>(&*pi)) {
+      printf("Segment\n");
+      cout << *s << endl;
+    } else {
+      printf("point\n");
+      const KPoint *p = boost::get<KPoint>(&*pi);
+      printf("%lf\n", p->x());
+      cout << *p << endl;
+    }
+  }
+  //printf("%f %f %f\n", pi.x(), pi.y(), pi.z());
+  exit(0);
+
+  test3();
 
   return 0;
 }

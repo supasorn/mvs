@@ -4,6 +4,7 @@
 using namespace cv;
 using namespace std;
 DEFINE_string(dataset, "/home/supasorn/mvs/datasets/templeRing", "dataset");
+DEFINE_bool(load, false, "load points");
 
 int n;
 
@@ -22,6 +23,7 @@ vector<Frame> frames;
 
 vector<Point3f> testPoints;
 vector<Point3f> testColors;
+vector<pair<int, int> > viscam;
 
 void getEpiLine(vector<Vec3f> &lines, Frame &f0, Frame &f1, vector<Point2f> &ps) {
   Mat r0_ = f0.r.t();
@@ -96,7 +98,7 @@ int getLineSegment(Point2f &p0, Point2f &p1, Vec3f &line, Size sz) {
 
 void detectHarris(Mat &im, vector<KeyPoint> &kp) {
   //Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(2000, 0.0001, 1, 3, true, 0.0001);
-  Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(500, 0.0001, 1, 3, true, 0.0001);
+  Ptr<FeatureDetector> detector = new GoodFeaturesToTrackDetector(5000, 0.0001, 1, 3, true, 0.0001);
   Mat gray;
   cvtColor(im, gray, CV_BGR2GRAY);
   detector->detect(gray, kp);
@@ -172,6 +174,7 @@ void testGeneratePoints(int i0, int i1) {
           tp.at<float>(1, i) / tp.at<float>(3, i),
           tp.at<float>(2, i) / tp.at<float>(3, i)
           ));
+    viscam.push_back(make_pair(i0, i1));
   }
 }
 
@@ -218,6 +221,61 @@ void display() {
   }
 }
 
+void savePoints() {
+  FILE *fo = fopen("point.bin", "wb");
+  int n = frames.size(); 
+  // Write the number of cameras, and cameras' centers.
+  fwrite(&n, sizeof(int), 1, fo);
+  for (int i = 0; i < n; i++) {
+    fwrite(&frames[i].camera.at<double>(0, 0), sizeof(double), 3, fo);
+  }
+
+  n = testPoints.size();
+  fwrite(&n, sizeof(int), 1, fo);
+  for (int i = 0; i < n; i++) {
+    fwrite(&testPoints[i].x, sizeof(float), 1, fo); 
+    fwrite(&testPoints[i].y, sizeof(float), 1, fo); 
+    fwrite(&testPoints[i].z, sizeof(float), 1, fo); 
+    fwrite(&testColors[i].x, sizeof(float), 1, fo); 
+    fwrite(&testColors[i].y, sizeof(float), 1, fo); 
+    fwrite(&testColors[i].z, sizeof(float), 1, fo); 
+    fwrite(&viscam[i].first, sizeof(int), 1, fo);
+    fwrite(&viscam[i].second, sizeof(int), 1, fo);
+  }
+  fclose(fo);
+  printf("Done writing\n");
+}
+
+void loadPoints() {
+  FILE *fi = fopen("point.bin", "rb");
+  int n; 
+  // Write the number of cameras, and cameras' centers.
+  fread(&n, sizeof(int), 1, fi);
+  printf("#cameras = %d\n", n);
+  for (int i = 0; i < n; i++) {
+    fread(&frames[i].camera.at<double>(0, 0), sizeof(double), 3, fi);
+  }
+
+  fread(&n, sizeof(int), 1, fi);
+  printf("#points = %d\n", n);
+  testPoints.resize(n);
+  testColors.resize(n);
+  viscam.resize(n);
+  for (int i = 0; i < n; i++) {
+    fread(&testPoints[i].x, sizeof(float), 1, fi); 
+    fread(&testPoints[i].y, sizeof(float), 1, fi); 
+    fread(&testPoints[i].z, sizeof(float), 1, fi); 
+    fread(&testColors[i].x, sizeof(float), 1, fi); 
+    fread(&testColors[i].y, sizeof(float), 1, fi); 
+    fread(&testColors[i].z, sizeof(float), 1, fi); 
+    //printf("%f %f %f\n", testColors[i].x, testColors[i].y, testColors[i].z);
+    fread(&viscam[i].first, sizeof(int), 1, fi);
+    fread(&viscam[i].second, sizeof(int), 1, fi);
+  }
+  fclose(fi);
+  printf("Done reading\n");
+}
+
 
 void loadDataset() {
   FILE *fi = fopen((FLAGS_dataset + "/templeR_par.txt").c_str(), "r");
@@ -262,10 +320,17 @@ void loadDataset() {
   }
   fclose(fi);
   imshow("img0", frames[0].img);
-  for (int i = 0; i < frames.size(); i++) {
-    if (i + 1 < frames.size())
-      testGeneratePoints(i, i + 1);
+ 
+  if (FLAGS_load) {
+    loadPoints();
+  } else {
+    for (int i = 0; i < frames.size(); i++) {
+      if (i + 1 < frames.size())
+        testGeneratePoints(i, i + 1);
+    }
+    savePoints();
   }
+
   Viz::setDisplayCallback(display);
   Viz::startWindow(800, 800);
 

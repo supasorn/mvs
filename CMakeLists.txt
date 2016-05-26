@@ -57,5 +57,5 @@ target_link_libraries (featuredetect ceres utilities libviz ply.so)
 add_executable (generatefeature generatefeature.cpp)
 target_link_libraries (generatefeature ceres utilities libviz ply.so) 
 
-add_executable (cgal cgal.cpp)
+add_executable (cgal cgal.cpp delaunay_mesh.cc)
 target_link_libraries (cgal ceres utilities libviz ply.so) 
