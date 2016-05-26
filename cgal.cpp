@@ -27,6 +27,7 @@ typedef DelaunayMesh::KSC::Point_3 KPoint;
 typedef DelaunayMesh::KSC::Segment_3 Segment;
 typedef DelaunayMesh::KSC::Triangle_3 Triangle;
 typedef DelaunayMesh::KSC::Intersect_3 Intersect;
+typedef DelaunayMesh::Tree::Intersection_and_primitive_id<DelaunayMesh::KSC::Ray_3>::Type IntersectReturn;
 
 
 vector<Mat> camera;
@@ -63,13 +64,14 @@ void printFacet(DelaunayMesh::Delaunay::Facet f) {
 
 KPoint p0(0, 0, 0);
 KPoint p1(2, 3, 4);
+//KPoint p1(1, 0, 0);
 vector<pair<Cell_handle, int> > intersected;
 
 void display() {
   DelaunayMesh::Delaunay &d = dm.d;
-  
+
   glBegin(GL_LINES);
-  
+
   glColor4ub(255, 255, 255, 80);
   for (auto it = d.finite_edges_begin(); it != d.finite_edges_end(); it++) {
     auto p0 = it->first->vertex(it->second)->point();
@@ -88,7 +90,7 @@ void display() {
     glEnd();
   }
 
-  
+
   glPointSize(10);
   glBegin(GL_POINTS);
   glColor3ub(0, 255, 0);
@@ -117,7 +119,7 @@ void display() {
 }
 void init() {
   glDepthFunc(GL_ALWAYS);
-  glEnable(GL_POINT_SMOOTH); 
+  glEnable(GL_POINT_SMOOTH);
 
   glEnable (GL_BLEND);
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -129,15 +131,32 @@ void RebuildTree() {
 
   Ray ray_query(p0 ,p1);
 
-  std::list<Primitive_id> primitives;
-  dm.RayIntersect(ray_query, primitives);
+
+  std::list<IntersectReturn> inters;
+  dm.RayIntersect(ray_query, inters);
 
   intersected.clear();
+  for (auto &inter : inters) {
+    if (boost::get<KPoint>(&(inter.first))) {
+      printf("point\n");
+      const DelaunayMesh::Facet *f = inter.second;
+
+      cout << inter.first << endl;
+      cout << f->first->info().id << endl;
+      intersected.push_back(make_pair(f->first, f->second));
+    } else if (boost::get<Segment>(&(inter.first))) {
+      printf("segment\n");
+      cout << inter.first;
+      cout << inter.second->first->info().id << endl;
+    }
+  }
+
+  /*
   for (auto i = primitives.begin(); i != primitives.end(); i++) {
     auto triangle = *i;
     intersected.push_back(make_pair(triangle->first, triangle->second));
-  }
-  
+  }*/
+
 }
 void keyboard2(unsigned char key, int x, int y) {
   DelaunayMesh::Delaunay &d = dm.d;
@@ -161,7 +180,7 @@ void test2() {
   for (auto it = d.all_cells_begin(); it != d.all_cells_end(); ++it) {
     it->info().id = id++;
   }
-  
+
   for (auto it = d.finite_facets_begin(); it != d.finite_facets_end(); it++) {
     //printf("%d\n", d.triangle(face));
     printFacet(*it);
@@ -200,33 +219,56 @@ void test2() {
 
 
 void iterateAllRays() {
+  typedef pair<const DelaunayMesh::Facet*, double> sortedFacets; 
+
+  struct Comparator {
+    static bool compare(sortedFacets &a, sortedFacets &b) { return a.second < b.second; }
+  };
+
   DelaunayMesh::Delaunay &d = dm.d;
-  std::list<Primitive_id> primitives;
   for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
     auto p = it->point();
     set<int> &cams = it->info().cams;
     printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
 
-    KPoint p0 = KPoint(p.x(), p.y(), p.z());
+    KPoint p1 = KPoint(p.x(), p.y(), p.z());
     for (int camId : cams) {
-      primitives.clear();
-      KPoint p1 = KPoint(camera[camId].at<double>(0, 0),
-                         camera[camId].at<double>(1, 0),
-                         camera[camId].at<double>(2, 0));
+      KPoint p0 = KPoint(camera[camId].at<double>(0, 0),
+          camera[camId].at<double>(1, 0),
+          camera[camId].at<double>(2, 0));
+
+      double cameraToPointDist = DelaunayMesh::DistanceSquared(p0, p1);
       Ray ray_query(p0, p1);
-      dm.RayIntersect(ray_query, primitives);
-      printf("#intersects = %d\n", primitives.size());
-      for (auto i = primitives.begin(); i != primitives.end(); i++) {
-        auto triangle = *i;
-        printf(" tetra1: %d\n", triangle->first->info().id);
-        printf(" tetra2: %d\n", d.mirror_facet(*triangle).first->info().id);
-        
-        //auto &p0 = triangle->m_pa;
-        //auto &p1 = triangle->m_pb;
-        //auto &p2 = triangle->m_pc;
-        //printf("%f %f %f\n", p0->m_x, p0->m_y, p0->m_z);
-        //printf("%f %f %f\n", p1->m_x, p1->m_y, p1->m_z);
-        //printf("%f %f %f\n", p2->m_x, p2->m_y, p2->m_z);
+
+      std::list<IntersectReturn> inters;
+      dm.RayIntersect(ray_query, inters);
+
+      // Store intersected facets and its distance from the depth point.
+      vector<sortedFacets> dists;
+      for (auto &inter: inters) {
+
+        // Only retrieve point intersection here because segment intersection
+        // always has triangle's normal perpedicular to the ray.
+        if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
+          const DelaunayMesh::Facet *f = inter.second;
+          double dist = DelaunayMesh::DistanceSquared(*p, p0) - cameraToPointDist;
+          //printf(" tetra1: %d\n", f->first->info().id);
+          //printf(" tetra2: %d\n", d.mirror_facet(*f).first->info().id);
+          //printf("%f %f %f\n", p->x(), p->y(), p->z());
+          //printf("%f\n", dist);
+          //cout << inter.first << endl;
+          //cout << f->first->info().id << endl;
+
+          //intersected.push_back(make_pair(f->first, f->second));
+          dists.push_back(make_pair(f, dist));
+        } 
+
+      }
+      printf("%d\n", camId);
+      sort(dists.begin(), dists.end(), Comparator::compare);
+
+      for (int i = 0; i < dists.size(); i++) {
+        printf("  %e %d\n", dists[i].second, dists[i].second == 0);
       }
     }
   }
@@ -236,7 +278,7 @@ void test3() {
   DelaunayMesh::Delaunay &d = dm.d;
 
   FILE *fi = fopen("point.bin", "rb");
-  int n; 
+  int n;
   // Write the number of cameras, and cameras' centers.
   fread(&n, sizeof(int), 1, fi);
   printf("#cameras = %d\n", n);
@@ -251,21 +293,21 @@ void test3() {
   float p[3], c[3];
   int vc[2];
   for (int i = 0; i < n; i++) {
-    fread(p, sizeof(float), 3, fi); 
-    fread(c, sizeof(float), 3, fi); 
+    fread(p, sizeof(float), 3, fi);
+    fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
     if (i % 100) continue;
 
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
     if (rand() % 60 == 0) {
-      p0 = KPoint(p[0], p[1], p[2]); 
+      p0 = KPoint(p[0], p[1], p[2]);
       p1 = KPoint(
           camera[vc[0]].at<double>(0, 0),
           camera[vc[0]].at<double>(1, 0),
           camera[vc[0]].at<double>(2, 0));
     }
-    
+
   }
 
   //RebuildTree();
@@ -284,26 +326,8 @@ void test3() {
 }
 int main() {
   //testRay();
-  Ray ray_query(KPoint(0, 0, 0), KPoint(1, 1, 1));
-  //CGAL::cpp11::result_of<Intersect(Ray, Triangle)>::type pi = CGAL::intersection(ray_query, Triangle(KPoint(1, 0, 0), KPoint(0, 1, 0), KPoint(0, 0, 1)));
-  //auto pi = CGAL::intersection(ray_query, Triangle(KPoint(1, 0, 0), KPoint(0, 1, 0), KPoint(0, 0, 1)));
-  auto pi = CGAL::intersection(ray_query, Triangle(KPoint(0, 0, 0), KPoint(1, 1, 1), KPoint(1, 0, 0)));
-  if (pi) {
-    if (const Segment* s = boost::get<Segment>(&*pi)) {
-      printf("Segment\n");
-      cout << *s << endl;
-    } else {
-      printf("point\n");
-      const KPoint *p = boost::get<KPoint>(&*pi);
-      printf("%lf\n", p->x());
-      cout << *p << endl;
-    }
-  }
-  //printf("%f %f %f\n", pi.x(), pi.y(), pi.z());
-  exit(0);
-
+  //test2();
   test3();
 
   return 0;
 }
-
