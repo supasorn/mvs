@@ -141,7 +141,7 @@ void RebuildTree() {
   for (auto &inter : inters) {
     if (boost::get<KPoint>(&(inter.first))) {
       printf("point\n");
-      const DelaunayMesh::Facet *f = inter.second;
+      const DelaunayMesh::Facet *f = &inter.second->f;
 
       cout << inter.first << endl;
       cout << f->first->info().id << endl;
@@ -149,7 +149,7 @@ void RebuildTree() {
     } else if (boost::get<Segment>(&(inter.first))) {
       printf("segment\n");
       cout << inter.first;
-      cout << inter.second->first->info().id << endl;
+      cout << inter.second->f.first->info().id << endl;
     }
   }
 
@@ -219,23 +219,13 @@ void test2() {
   Viz::startWindow(800, 800);
 }
 
-Vector_3 ComputeFacetNormal(const DelaunayMesh::Facet *f) {
-  const auto &ch = f->first;
-  const auto &v0 = ch->vertex((f->second + 1) % 4)->point();
-  const auto &v1 = ch->vertex((f->second + 2) % 4)->point();
-  const auto &v2 = ch->vertex((f->second + 3) % 4)->point();
-  auto v10 = v1 - v0;
-  auto v21 = v2 - v1;
-  auto normal = CGAL::cross_product(v10, v21);
-  return normal / sqrt(normal.squared_length());
-}
 //int SameSide(DelaunayMesh::KSC::Vector_3 ray, const Vector_3 &normal) {
-int SameSide(DelaunayMesh::K::Vector_3 ray, DelaunayMesh::K::Vector_3 &normal) {
+int SameSide(DelaunayMesh::K::Vector_3 ray, const DelaunayMesh::K::Vector_3 &normal) {
   return DelaunayMesh::KSC::Vector_3(ray.x(), ray.y(), ray.z()) * DelaunayMesh::KSC::Vector_3(normal.x(), normal.y(), normal.z()) > 0;
 }
 
 void iterateAllRays() {
-  typedef pair<const DelaunayMesh::Facet*, double> sortedFacets; 
+  typedef pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
 
   struct Comparator {
     static bool compare(sortedFacets &a, sortedFacets &b) { return a.second < b.second; }
@@ -266,35 +256,22 @@ void iterateAllRays() {
         // Only retrieve point intersection here because segment intersection
         // always has triangle's normal perpedicular to the ray.
         if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
-          const DelaunayMesh::Facet *f = inter.second;
+          const DelaunayMesh::Facet &f = inter.second->f;
           double dist = DelaunayMesh::DistanceSquared(*p, p0) - cameraToPointDist;
-          //printf(" tetra1: %d\n", f->first->info().id);
-          //printf(" tetra2: %d\n", d.mirror_facet(*f).first->info().id);
+          //printf(" tetra1: %d\n", f.first->info().id);
+          //printf(" tetra2: %d\n", d.mirror_facet(f).first->info().id);
           //printf("%f %f %f\n", p->x(), p->y(), p->z());
           //printf("%f\n", dist);
           //cout << inter.first << endl;
           //cout << f->first->info().id << endl;
 
-          //intersected.push_back(make_pair(f->first, f->second));
-          auto nor = ComputeFacetNormal(f) ;
-          cout << " :  " << nor << endl;
-          //auto diff = p0 - p1;
-          auto diff = f->first->vertex(f->second)->point() - f->first->vertex((f->second + 1) % 4)->point();
-          int b = SameSide(diff, nor);
-          cout << " - " << f->second << ":" << b << endl;
-          auto tt = f->first->vertex(f->second)->point();
-          int inf = d.is_infinite(f->first->vertex(f->second));
+          //intersected.push_back(make_pair(f.first, f.second));
+          
+          //cout << " - " << f.second << ":" << b << endl;
           //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
           //printf("infinite %d\n", inf);
           //printFacet(*f);
-          if (!inf) {
-            if (f->second == 3 && b == 0) exit(0);
-            if (f->second == 2 && b == 1) exit(0);
-            if (f->second == 1 && b == 0) exit(0);
-            if (f->second == 0 && b == 1) exit(0);
-          }
-
-          dists.push_back(make_pair(f, dist));
+          dists.push_back(make_pair(inter.second, dist));
         } 
 
       }
@@ -302,8 +279,20 @@ void iterateAllRays() {
       sort(dists.begin(), dists.end(), Comparator::compare);
 
       for (int i = 0; i < dists.size(); i++) {
-        
         printf("  %e %d\n", dists[i].second, dists[i].second == 0);
+        auto &f = dists[i].first->f; // Facet
+        auto &ch = f.first; // Cell handle 
+        int &id = f.second; // Vertex id.
+
+        auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
+        int b = SameSide(diff, dists[i].first->n);
+        int inf = d.is_infinite(ch->vertex(id));
+        if (!inf) {
+          if (f.second == 3 && b == 0) exit(0);
+          if (f.second == 2 && b == 1) exit(0);
+          if (f.second == 1 && b == 0) exit(0);
+          if (f.second == 0 && b == 1) exit(0);
+        }
       }
     }
   }

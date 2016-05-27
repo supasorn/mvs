@@ -31,6 +31,18 @@ void DelaunayMesh::AddPoint(const DelaunayMesh::DPoint &p, const DelaunayMesh::V
 
 }
 
+DelaunayMesh::FacetAndNormal::FacetAndNormal(Facet f) {
+  this->f = f;
+  auto &ch = f.first;
+  auto &v0 = ch->vertex((f.second + 1) % 4)->point();
+  auto &v1 = ch->vertex((f.second + 2) % 4)->point();
+  auto &v2 = ch->vertex((f.second + 3) % 4)->point();
+  auto v10 = v1 - v0;
+  auto v21 = v2 - v1;
+  n = CGAL::cross_product(v10, v21);
+  //n = n / sqrt(n.squared_length());
+}
+
 // Utility function to convert a custom point type to CGAL point type.
 DelaunayMesh::Point DelaunayMesh::TrianglePrimitive::convert(const DelaunayMesh::DPoint &p) const {
   return DelaunayMesh::Point(p[0], p[1], p[2]);
@@ -38,15 +50,15 @@ DelaunayMesh::Point DelaunayMesh::TrianglePrimitive::convert(const DelaunayMesh:
     
 // On-the-fly conversion from the internal data to the CGAL types.
 DelaunayMesh::Datum DelaunayMesh::TrianglePrimitive::datum() const {
-  const auto &v0 = m_pt->first->vertex((m_pt->second + 1) % 4);
-  const auto &v1 = m_pt->first->vertex((m_pt->second + 2) % 4);
-  const auto &v2 = m_pt->first->vertex((m_pt->second + 3) % 4);
+  const auto &v0 = m_pt->f.first->vertex((m_pt->f.second + 1) % 4);
+  const auto &v1 = m_pt->f.first->vertex((m_pt->f.second + 2) % 4);
+  const auto &v2 = m_pt->f.first->vertex((m_pt->f.second + 3) % 4);
   return Datum(convert(v0->point()), convert(v1->point()), convert(v2->point()));
 }
 
 // Returns a reference point which must be on the primitive.
 DelaunayMesh::Point DelaunayMesh::TrianglePrimitive::reference_point() const { 
-  const auto &p = m_pt->first->vertex((m_pt->second + 1) % 4)->point();
+  const auto &p = m_pt->f.first->vertex((m_pt->f.second + 1) % 4)->point();
   return DelaunayMesh::Point(p[0], p[1], p[2]);
 }
 
@@ -55,7 +67,7 @@ int DelaunayMesh::BuildAABBTree() {
   triangles.clear();
   tree.clear();
   for (auto it = d.finite_facets_begin(); it != d.finite_facets_end(); it++) {
-    triangles.push_back(*it);
+    triangles.push_back(FacetAndNormal(*it));
   }
   tree.insert(triangles.begin(),triangles.end());
   return triangles.size();

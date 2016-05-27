@@ -48,7 +48,18 @@ public:
   typedef DelaunayMesh::Delaunay::Point   DPoint;
   typedef Delaunay::Facet Facet;
 
-  typedef std::vector<Facet>::const_iterator Iterator;
+  struct FacetAndNormal {
+    Facet f;
+    // Unnormalized normal used for figuring out whether a camera ray intersects
+    // front or back facet.
+    K::Vector_3 n;
+
+    // Assigns f and compute n.
+    FacetAndNormal(Facet f);
+  };
+
+
+  typedef std::vector<FacetAndNormal>::const_iterator Iterator;
 
   // The following primitive provides the conversion facilities between
   // the custom triangle and point types and the CGAL ones.
@@ -57,7 +68,7 @@ public:
   typedef KSC::Triangle_3 Datum; // CGAL 3D triangle type.
   public:
     // This is the type of data that the queries returns. 
-    typedef const Facet* Id;
+    typedef const FacetAndNormal* Id;
     // CGAL types returned.
   private:
     Id m_pt; // This is what the AABB tree stores internally.
@@ -105,7 +116,7 @@ private:
   double merge_threshold = 0.00001;
 
   // Triangle in AABB. This vector MUST persist throughout AABB usage. 
-  std::vector<Facet> triangles;
+  std::vector<FacetAndNormal> triangles;
 
 };
 

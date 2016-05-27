@@ -56,20 +56,7 @@ void Viz::toObj(string filename) {
   Viz::toObj(filename, Viz::vertices, Viz::indices, Viz::normals);
 }
 
-void Viz::toPly(string filename, vector<GLfloat> &vertices, vector<GLuint> &indices, vector<GLfloat> &normal, vector<GLubyte> &colors) {
-  FILE *fo = fopen(filename.c_str(), "w");
-  fprintf(fo, "ply\nformat ascii 1.0\nelement vertex %d\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nelement face %d\nproperty list uchar int vertex_indices\nend_header\n", vertices.size() / 3, indices.size() / 3);
-  for (int i = 0; i < vertices.size(); i+= 3) {
-    fprintf(fo, "%lf %lf %lf %u %u %u\n", vertices[i], vertices[i+1], vertices[i+2], colors[i], colors[i+1], colors[i+2]);
-  }
-  for (int i = 0; i < indices.size(); i+= 3) {
-    fprintf(fo, "3 %d %d %d\n", indices[i] , indices[i+1], indices[i+2]);
-  }
-  fclose(fo);
-}
-void Viz::toPly(string filename) {
-  Viz::toPly(filename, Viz::vertices, Viz::indices, Viz::normals, Viz::colors);
-}
+
 
 void Viz::issueNormal(vector<GLfloat> &normal, vector<GLfloat> &vertices, vector<GLuint> &indices, double mult) {
   normal.clear();
@@ -453,6 +440,21 @@ vector<GLfloat> *_vertices;
 vector<GLubyte> *_colors;
 vector<GLuint> *_indices;
 
+#ifdef PLY
+void Viz::toPly(string filename, vector<GLfloat> &vertices, vector<GLuint> &indices, vector<GLfloat> &normal, vector<GLubyte> &colors) {
+  FILE *fo = fopen(filename.c_str(), "w");
+  fprintf(fo, "ply\nformat ascii 1.0\nelement vertex %d\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nelement face %d\nproperty list uchar int vertex_indices\nend_header\n", vertices.size() / 3, indices.size() / 3);
+  for (int i = 0; i < vertices.size(); i+= 3) {
+    fprintf(fo, "%lf %lf %lf %u %u %u\n", vertices[i], vertices[i+1], vertices[i+2], colors[i], colors[i+1], colors[i+2]);
+  }
+  for (int i = 0; i < indices.size(); i+= 3) {
+    fprintf(fo, "3 %d %d %d\n", indices[i] , indices[i+1], indices[i+2]);
+  }
+  fclose(fo);
+}
+void Viz::toPly(string filename) {
+  Viz::toPly(filename, Viz::vertices, Viz::indices, Viz::normals, Viz::colors);
+}
 void vertex_callback(ply::float32 x) {
   _vertices->push_back(x);
 }
@@ -541,6 +543,7 @@ void Viz::loadPly(string filename, vector<GLfloat> &vertices, vector<GLuint> &in
 void Viz::loadPly(string filename) {
   Viz::loadPly(filename, Viz::vertices, Viz::indices, Viz::colors);
 }
+#endif
 
 void Viz::loadModelXYZ(Mat &model) {
   Mat id;

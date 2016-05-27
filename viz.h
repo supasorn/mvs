@@ -6,7 +6,11 @@
 #include <vector>
 //#include "highgui.h"
 //#include "cv.h"
+
+#ifdef PLY
 #include "ply.hpp"
+#endif
+
 using namespace cv;
 
 #ifdef __APPLE__
@@ -18,6 +22,7 @@ using namespace cv;
 #include <stdio.h>
 #include <math.h>
 
+using namespace std;
 #define forMat(i, j, mat) for (int i = 0; i < mat.rows; i++) for (int j = 0; j < mat.cols; j++)
 class Viz {
   private:
@@ -64,8 +69,10 @@ class Viz {
     static void setLightPosition(double a, double b);
     static void toObj(std::string filename, std::vector<GLfloat> &vertices, std::vector<GLuint> &indices, std::vector<GLfloat> &normal);
     static void toObj(std::string filename);
+#ifdef PLY
     static void toPly(std::string filename, std::vector<GLfloat> &vertices, std::vector<GLuint> &indices, std::vector<GLfloat> &normal, std::vector<GLubyte> &colors);
     static void toPly(std::string filename);
+#endif
     static char keyStates[256];
     static bool drawMesh, useColor, useTexture, shade;
     static int cameraMode;
