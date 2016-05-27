@@ -43,6 +43,7 @@ message("CMAKE_CXX_FLAGS_DEBUG is ${CMAKE_CXX_FLAGS_DEBUG}")
 message("CMAKE_CXX_FLAGS_RELEASE is ${CMAKE_CXX_FLAGS_RELEASE}")
 
 add_library (pyramid ../research/utils/pyramid.cpp)
+add_library (maxflow maxflow/v2_adjacency_list/graph.cpp maxflow/v2_adjacency_list/maxflow.cpp)
 
 add_library (utilities ../research/utils/utilities.cpp)
 target_link_libraries(utilities pyramid ${OpenCV_LIBS} ${OPTICALFLOW} ${EXTRA_LIBS})
@@ -58,4 +59,4 @@ add_executable (generatefeature generatefeature.cpp)
 target_link_libraries (generatefeature ceres utilities libviz ply.so) 
 
 add_executable (cgal cgal.cpp delaunay_mesh.cc)
-target_link_libraries (cgal ceres utilities libviz ply.so) 
+target_link_libraries (cgal ceres utilities libviz ply.so maxflow) 

@@ -12,6 +12,7 @@
 #include <set>
 #include "delaunay_mesh.h"
 #include "viz.h"
+#include "maxflow/v2_adjacency_list/graph.h"
 
 DelaunayMesh dm;
 using namespace std;
@@ -22,6 +23,7 @@ typedef DelaunayMesh::Tree::Primitive_id Primitive_id;
 typedef DelaunayMesh::VertexInfo VertexInfo;
 
 typedef DelaunayMesh::KSC::Ray_3 Ray;
+typedef DelaunayMesh::K::Vector_3 Vector_3;
 typedef DelaunayMesh::KSC::Line_3 Line;
 typedef DelaunayMesh::KSC::Point_3 KPoint;
 typedef DelaunayMesh::KSC::Segment_3 Segment;
@@ -36,7 +38,7 @@ float rand1(float c = 1) {
   return c * (2.0 * rand() / RAND_MAX - 1);
 }
 void printPoint(DelaunayMesh::DPoint &p) {
-  printf("%f %f %f\n", p.x(), p.y(), p.z());
+  printf("[%f %f %f]\n", p.x(), p.y(), p.z());
 }
 
 
@@ -217,6 +219,20 @@ void test2() {
   Viz::startWindow(800, 800);
 }
 
+Vector_3 ComputeFacetNormal(const DelaunayMesh::Facet *f) {
+  const auto &ch = f->first;
+  const auto &v0 = ch->vertex((f->second + 1) % 4)->point();
+  const auto &v1 = ch->vertex((f->second + 2) % 4)->point();
+  const auto &v2 = ch->vertex((f->second + 3) % 4)->point();
+  auto v10 = v1 - v0;
+  auto v21 = v2 - v1;
+  auto normal = CGAL::cross_product(v10, v21);
+  return normal / sqrt(normal.squared_length());
+}
+//int SameSide(DelaunayMesh::KSC::Vector_3 ray, const Vector_3 &normal) {
+int SameSide(DelaunayMesh::K::Vector_3 ray, DelaunayMesh::K::Vector_3 &normal) {
+  return DelaunayMesh::KSC::Vector_3(ray.x(), ray.y(), ray.z()) * DelaunayMesh::KSC::Vector_3(normal.x(), normal.y(), normal.z()) > 0;
+}
 
 void iterateAllRays() {
   typedef pair<const DelaunayMesh::Facet*, double> sortedFacets; 
@@ -260,6 +276,24 @@ void iterateAllRays() {
           //cout << f->first->info().id << endl;
 
           //intersected.push_back(make_pair(f->first, f->second));
+          auto nor = ComputeFacetNormal(f) ;
+          cout << " :  " << nor << endl;
+          //auto diff = p0 - p1;
+          auto diff = f->first->vertex(f->second)->point() - f->first->vertex((f->second + 1) % 4)->point();
+          int b = SameSide(diff, nor);
+          cout << " - " << f->second << ":" << b << endl;
+          auto tt = f->first->vertex(f->second)->point();
+          int inf = d.is_infinite(f->first->vertex(f->second));
+          //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
+          //printf("infinite %d\n", inf);
+          //printFacet(*f);
+          if (!inf) {
+            if (f->second == 3 && b == 0) exit(0);
+            if (f->second == 2 && b == 1) exit(0);
+            if (f->second == 1 && b == 0) exit(0);
+            if (f->second == 0 && b == 1) exit(0);
+          }
+
           dists.push_back(make_pair(f, dist));
         } 
 
@@ -268,6 +302,7 @@ void iterateAllRays() {
       sort(dists.begin(), dists.end(), Comparator::compare);
 
       for (int i = 0; i < dists.size(); i++) {
+        
         printf("  %e %d\n", dists[i].second, dists[i].second == 0);
       }
     }
@@ -299,7 +334,11 @@ void test3() {
 
     if (i % 100) continue;
 
+    if (p[0] == 0 && p[1] == 0 && p[2] == 0)
+      exit(0);
+
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
+
     if (rand() % 60 == 0) {
       p0 = KPoint(p[0], p[1], p[2]);
       p1 = KPoint(
@@ -324,7 +363,35 @@ void test3() {
   fclose(fi);
   printf("Done reading\n");
 }
+
+void testGraph() {
+  Graph::node_id nodes[2];
+	Graph *g = new Graph();
+	nodes[0] = g -> add_node();
+	nodes[1] = g -> add_node();
+	g -> add_tweights(nodes[0], 1, 5);
+	g -> add_tweights(nodes[1], 10, 6);
+	g -> add_tweights(nodes[1], 10, 0);
+	g -> add_edge(nodes[0], nodes[1], 3, 4);
+
+	Graph::flowtype flow = g -> maxflow();
+
+	printf("Flow = %d\n", flow);
+	printf("Minimum cut:\n");
+	if (g->what_segment(nodes[0]) == Graph::SOURCE)
+		printf("node0 is in the SOURCE set\n");
+	else
+		printf("node0 is in the SINK set\n");
+	if (g->what_segment(nodes[1]) == Graph::SOURCE)
+		printf("node1 is in the SOURCE set\n");
+	else
+		printf("node1 is in the SINK set\n");
+ 
+  exit(0);
+	delete g;
+}
 int main() {
+  //testGraph();
   //testRay();
   //test2();
   test3();
