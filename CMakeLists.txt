@@ -48,7 +48,7 @@ add_library (maxflow maxflow/v2_adjacency_list/graph.cpp maxflow/v2_adjacency_li
 add_library (utilities ../research/utils/utilities.cpp)
 target_link_libraries(utilities pyramid ${OpenCV_LIBS} ${OPTICALFLOW} ${EXTRA_LIBS})
 
-add_library (libviz ../research/viz.cpp)
+add_library (libviz viz.cpp)
 
 add_library (raster ../research/utils/raster.cpp)
 
@@ -59,4 +59,4 @@ add_executable (generatefeature generatefeature.cpp)
 target_link_libraries (generatefeature ceres utilities libviz ply.so) 
 
 add_executable (cgal cgal.cpp delaunay_mesh.cc)
-target_link_libraries (cgal ceres utilities libviz ply.so maxflow) 
+target_link_libraries (cgal ceres libviz ply.so maxflow ${EXTRA_LIBS} ${OpenCV_LIBS}) 
