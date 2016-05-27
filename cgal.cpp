@@ -34,6 +34,9 @@ typedef DelaunayMesh::Tree::Intersection_and_primitive_id<DelaunayMesh::KSC::Ray
 
 vector<Mat> camera;
 
+vector<Graph::node_id> nodes;
+Graph *g;
+
 float rand1(float c = 1) {
   return c * (2.0 * rand() / RAND_MAX - 1);
 }
@@ -92,7 +95,25 @@ void display() {
     glEnd();
   }
 
+  for (auto it = d.finite_facets_begin(); it != d.finite_facets_end(); it++) {
+    const DelaunayMesh::Facet &f = *it;
 
+    int id0 = f.first->info().id;
+    int id1 = d.mirror_facet(f).first->info().id;
+    if (g->what_segment(nodes[id0]) != g->what_segment(nodes[id1])) {
+      glColor4ub(28, 159, 213, 80);
+      glBegin(GL_TRIANGLES);
+      auto v0 = f.first->vertex((f.second + 1) % 4)->point();
+      auto v1 = f.first->vertex((f.second + 2) % 4)->point();
+      auto v2 = f.first->vertex((f.second + 3) % 4)->point();
+      glVertex3f(v0.x(), v0.y(), v0.z());
+      glVertex3f(v1.x(), v1.y(), v1.z());
+      glVertex3f(v2.x(), v2.y(), v2.z());
+      glEnd();
+    }
+  }
+
+  /*
   glPointSize(10);
   glBegin(GL_POINTS);
   glColor3ub(0, 255, 0);
@@ -116,7 +137,7 @@ void display() {
     p = intersected[i].first->vertex((intersected[i].second + 3) % 4)->point();
     glVertex3f(p[0], p[1], p[2]);
     glEnd();
-  }
+  }*/
 
 }
 void init() {
@@ -220,22 +241,29 @@ void test2() {
 }
 
 //int SameSide(DelaunayMesh::KSC::Vector_3 ray, const Vector_3 &normal) {
-int SameSide(DelaunayMesh::K::Vector_3 ray, const DelaunayMesh::K::Vector_3 &normal) {
-  return DelaunayMesh::KSC::Vector_3(ray.x(), ray.y(), ray.z()) * DelaunayMesh::KSC::Vector_3(normal.x(), normal.y(), normal.z()) > 0;
-}
+//int SameSide(DelaunayMesh::KSC::Vector_3 ray, const DelaunayMesh::K::Vector_3 &normal) {
+  //return DelaunayMesh::KSC::Vector_3(ray.x(), ray.y(), ray.z()) * DelaunayMesh::KSC::Vector_3(normal.x(), normal.y(), normal.z()) > 0;
+//}
 
 void iterateAllRays() {
-  typedef pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
+  DelaunayMesh::Delaunay &d = dm.d;
 
+  typedef pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
   struct Comparator {
     static bool compare(sortedFacets &a, sortedFacets &b) { return a.second < b.second; }
   };
 
-  DelaunayMesh::Delaunay &d = dm.d;
+  nodes.resize(d.number_of_cells());
+	g = new Graph();
+
+  for (int i = 0; i < nodes.size(); i++) {
+    nodes[i] = g->add_node();
+  }
+
   for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
     auto p = it->point();
     set<int> &cams = it->info().cams;
-    printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
+    //printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
 
     KPoint p1 = KPoint(p.x(), p.y(), p.z());
     for (int camId : cams) {
@@ -245,6 +273,7 @@ void iterateAllRays() {
 
       double cameraToPointDist = DelaunayMesh::DistanceSquared(p0, p1);
       Ray ray_query(p0, p1);
+      auto toCamera = p0 - p1;
 
       std::list<IntersectReturn> inters;
       dm.RayIntersect(ray_query, inters);
@@ -273,29 +302,75 @@ void iterateAllRays() {
           //printFacet(*f);
           dists.push_back(make_pair(inter.second, dist));
         } 
-
       }
-      printf("%d\n", camId);
+      //printf("%d\n", camId);
       sort(dists.begin(), dists.end(), Comparator::compare);
 
-      for (int i = 0; i < dists.size(); i++) {
-        printf("  %e %d\n", dists[i].second, dists[i].second == 0);
+      // ------ 0
+      auto &normal = dists[0].first->n;
+      // True iff normal and ray from point to camera are on the same side.
+      int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * toCamera.z() > 0;
+      int odd = dists[0].first->f.second % 2;
+
+      if (ss ^ odd) {
+        g->add_tweights(nodes[d.mirror_facet(dists[0].first->f).first->info().id], 100, 0);
+      } else {
+        g->add_tweights(nodes[dists[0].first->f.first->info().id], 100, 0);
+      }
+      // ------ 0
+      //
+      int i;
+      for (i = 0; i < dists.size(); i++) {
+        if (dists[i].second == 0) {
+          while (i < dists.size() && dists[i++].second == 0);
+          break;
+        }
+        //printf("  %e %d\n", dists[i].second, dists[i].second == 0);
         auto &f = dists[i].first->f; // Facet
         auto &ch = f.first; // Cell handle 
-        int &id = f.second; // Vertex id.
+        const int &id = f.second; // Vertex id.
 
-        auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
-        int b = SameSide(diff, dists[i].first->n);
+        //auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
+        //int b = SameSide(diff, dists[i].first->n);
         int inf = d.is_infinite(ch->vertex(id));
-        if (!inf) {
-          if (f.second == 3 && b == 0) exit(0);
-          if (f.second == 2 && b == 1) exit(0);
-          if (f.second == 1 && b == 0) exit(0);
-          if (f.second == 0 && b == 1) exit(0);
+
+
+        auto &normal = dists[i].first->n;
+        int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * toCamera.z() > 0;
+        int odd = dists[i].first->f.second % 2;
+
+        int id0 = dists[i].first->f.first->info().id;
+        int id1 = d.mirror_facet(dists[i].first->f).first->info().id;
+
+        if (ss ^ odd) {
+          g->add_edge(nodes[id0], nodes[id1], 100, 0);
+        } else {
+          g->add_edge(nodes[id0], nodes[id1], 0, 100);
+        }
+        //printf("  %e %d\n", dists[i].second, b);
+      }
+      if (i < dists.size()) {
+        auto &normal = dists[i].first->n;
+        // True iff normal and ray from point to camera are on the same side.
+        int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * toCamera.z() > 0;
+        int odd = dists[i].first->f.second % 2;
+
+        if (ss ^ odd) {
+          g->add_tweights(nodes[d.mirror_facet(dists[i].first->f).first->info().id], 0, 100);
+        } else {
+          g->add_tweights(nodes[dists[i].first->f.first->info().id], 0, 100);
         }
       }
     }
   }
+  printf("Solving min-cut\n");
+	Graph::flowtype flow = g -> maxflow();
+  int count = 0;
+  for (int i = 0; i < nodes.size(); i++) {
+    printf("%d %d\n", i, g->what_segment(nodes[i]) == Graph::SOURCE);
+    count += g->what_segment(nodes[i]) == Graph::SOURCE;
+  }
+  printf("count = %d\n", count);
 }
 
 void test3() {
@@ -321,7 +396,7 @@ void test3() {
     fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
-    if (i % 100) continue;
+    if (i % 100 < 90) continue;
 
     if (p[0] == 0 && p[1] == 0 && p[2] == 0)
       exit(0);
@@ -358,10 +433,9 @@ void testGraph() {
 	Graph *g = new Graph();
 	nodes[0] = g -> add_node();
 	nodes[1] = g -> add_node();
-	g -> add_tweights(nodes[0], 1, 5);
-	g -> add_tweights(nodes[1], 10, 6);
-	g -> add_tweights(nodes[1], 10, 0);
-	g -> add_edge(nodes[0], nodes[1], 3, 4);
+	g -> add_tweights(nodes[0], 100, 1);
+	g -> add_tweights(nodes[1], 1, 100);
+	//g -> add_edge(nodes[0], nodes[1], 3, 4);
 
 	Graph::flowtype flow = g -> maxflow();
 

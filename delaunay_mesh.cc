@@ -74,8 +74,6 @@ int DelaunayMesh::BuildAABBTree() {
 }
 
 void DelaunayMesh::RayIntersect(const DelaunayMesh::KSC::Ray_3 &ray, std::list<Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type> &intersections) {
-  //tree.all_intersected_primitives(ray, std::back_inserter(primitives));
-  //std::list<Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type> re;
   tree.all_intersections(ray, std::back_inserter(intersections));
 
 }
