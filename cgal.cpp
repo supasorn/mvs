@@ -32,6 +32,8 @@ typedef DelaunayMesh::KSC::Intersect_3 Intersect;
 typedef DelaunayMesh::Tree::Intersection_and_primitive_id<DelaunayMesh::KSC::Ray_3>::Type IntersectReturn;
 
 
+#include "debug.h"
+
 vector<Mat> camera;
 
 vector<int> nodesOut;
@@ -76,6 +78,14 @@ vector<pair<Cell_handle, int> > intersected;
 void display() {
   DelaunayMesh::Delaunay &d = dm.d;
 
+  glPointSize(4);
+  glBegin(GL_POINTS);
+  for (int i = 0; i < camera.size(); i++) {
+    glColor3ub(255, 0, 0);
+    glVertex3f(camera[i].at<double>(0, 0), camera[i].at<double>(1, 0), camera[i].at<double>(2, 0));
+  }
+  glEnd();
+
   glBegin(GL_LINES);
 
   glColor4ub(255, 255, 255, 80);
@@ -105,6 +115,7 @@ void display() {
     int id1 = d.mirror_facet(f).first->info().id;
     //if (g->what_segment(nodes[id0]) != g->what_segment(nodes[id1])) {
     if (nodesOut[id0] != nodesOut[id1]) {
+    //if ((nodesOut[id0] > 20) != (nodesOut[id1] > 20)) {
       glColor4ub(28, 159, 213, 80);
       glBegin(GL_TRIANGLES);
       auto v0 = f.first->vertex((f.second + 1) % 4)->point();
@@ -250,7 +261,11 @@ void test2() {
   //return DelaunayMesh::KSC::Vector_3(ray.x(), ray.y(), ray.z()) * DelaunayMesh::KSC::Vector_3(normal.x(), normal.y(), normal.z()) > 0;
 //}
 
-void iterateAllRays() {
+inline int IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const DelaunayMesh::K::Vector_3 &b) {
+  return a.x() + b.x() + a.y() * b.y() + a.z() * b.z() > 0;
+}
+
+void AssignCost(DelaunayMesh &dm, KPoint &point, KPoint &camera, double cost) {
   DelaunayMesh::Delaunay &d = dm.d;
 
   typedef pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
@@ -258,8 +273,140 @@ void iterateAllRays() {
     static bool compare(sortedFacets &a, sortedFacets &b) { return a.second < b.second; }
   };
 
+  double cameraToPointDist = DelaunayMesh::DistanceSquared(camera, point);
+  Ray ray_query(camera, point);
+  auto toCamera = camera - point;
+
+  std::list<IntersectReturn> inters;
+  dm.RayIntersect(ray_query, inters);
+
+  // Store intersected facets and its distance from the depth point.
+  vector<sortedFacets> dists;
+  for (auto &inter: inters) {
+
+    // Only retrieve point intersection here because segment intersection
+    // always has triangle's normal perpedicular to the ray.
+    if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
+      const DelaunayMesh::Facet &f = inter.second->f;
+      double dist = DelaunayMesh::DistanceSquared(*p, camera) - cameraToPointDist;
+      //printf(" tetra1: %d\n", f.first->info().id);
+      //printf(" tetra2: %d\n", d.mirror_facet(f).first->info().id);
+      //printf("%f %f %f\n", p->x(), p->y(), p->z());
+      //printf("%f\n", dist);
+      //cout << inter.first << endl;
+      //cout << f->first->info().id << endl;
+
+      //intersected.push_back(make_pair(f.first, f.second));
+
+      //cout << " - " << f.second << ":" << b << endl;
+      //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
+      //printf("infinite %d\n", inf);
+      //printFacet(*f);
+      dists.push_back(make_pair(inter.second, dist));
+    } 
+  }
+  //printf("%d\n", camId);
+  sort(dists.begin(), dists.end(), Comparator::compare);
+
+  // ------ 0
+  // True iff normal and ray from point to camera are on the same side.
+  int ss = IsSameSide(toCamera, dists[0].first->n);
+  int odd = dists[0].first->f.second % 2;
+  
+  printf("GT %d\n", d.locate(DelaunayMesh::K::Point_3(camera.x(), camera.y(), camera.z()))->info().id);
+  printf("retid %d, ss %d, od %d\n", dists[0].first->f.first->info().id, ss, odd);
+  if (!(ss ^ odd)) {
+    g->add_tweights(nodes[dists[0].first->f.first->info().id], cost, 0);
+    printf("first %d (%d)\n", dists[0].first->f.first->info().id, dists[0].first->f.second);
+    //nodesOut[dists[0].first->f.first->info().id] = 0;
+    //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 1;
+  } else {
+    g->add_tweights(nodes[d.mirror_facet(dists[0].first->f).first->info().id], cost, 0);
+    printf("first %d (%d)\n", d.mirror_facet(dists[0].first->f).first->info().id, d.mirror_facet(dists[0].first->f).second);
+    //nodesOut[dists[0].first->f.first->info().id] = 1;
+    //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 0;
+  }
+  //printFacet(dists[0].first->f);
+  //printFacet(d.mirror_facet(dists[0].first->f));
+  auto test = dists[0].first->f.first->vertex(3)->point() - dists[0].first->f.first->vertex(0)->point();
+  auto nn = dists[0].first->n;
+  printf("== %d\n", test.x() * nn.x() + test.y() * nn.y() + test.z() * nn.z() > 0);
+  addCell(dists[0].first->f.first);
+  addCell(d.mirror_facet(dists[0].first->f).first);
+  addArrow(camera, point);
+  //outObj();
+  //exit(0);
+  // ------ 0
+  //
+  int i;
+  for (i = 0; i < dists.size(); i++) {
+    if (dists[i].second == 0) {
+      while (i < dists.size() && dists[i].second == 0) 
+        i++;
+      break;
+    }
+    //printf("  %e %d\n", dists[i].second, dists[i].second == 0);
+    auto &f = dists[i].first->f; // Facet
+    auto &ch = f.first; // Cell handle 
+    const int &id = f.second; // Vertex id.
+
+    //auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
+    //int b = SameSide(diff, dists[i].first->n);
+    int inf = d.is_infinite(ch->vertex(id));
+
+
+    int id0 = dists[i].first->f.first->info().id;
+    int id1 = d.mirror_facet(dists[i].first->f).first->info().id;
+    addCell(dists[i].first->f.first);
+    addCell(d.mirror_facet(dists[i].first->f).first);
+
+    //printf("%d inf(%d)\n", id0, d.is_infinite(dists[i].first->f.first));
+    //printf("%d inf(%d)\n", id1, d.is_infinite(d.mirror_facet(dists[i].first->f).first));
+    int ss = IsSameSide(toCamera, dists[i].first->n);
+    int odd = dists[i].first->f.second % 2;
+    //if (ss ^ !odd) {
+    if (!(ss ^ odd)) {
+      g->add_edge(nodes[id0], nodes[id1], cost, 0);
+      printf("f %d (%d) -> %d (%d)  %f\n", id0, dists[i].first->f.second, id1, d.mirror_facet(dists[i].first->f).second, dists[i].second);
+    } else {
+      //g->add_edge(nodes[id0], nodes[id1], 0, cost);
+      g->add_edge(nodes[id1], nodes[id0], cost, 0);
+      printf("b %d (%d) -> %d (%d)  %f\n", id1, d.mirror_facet(dists[i].first->f).second, id0, dists[i].first->f.second, dists[i].second);
+    }
+    //nodesOut[id0] = 0;
+    //nodesOut[id1] = 0;
+
+    //printf("  %e %d\n", dists[i].second, b);
+  }
+
+  outObj();
+  exit(0);
+
+  if (i < dists.size()) {
+    // True iff normal and ray from point to camera are on the same side.
+    int ss = IsSameSide(toCamera, dists[i].first->n);
+    int odd = dists[i].first->f.second % 2;
+    if (!(ss ^ odd)) {
+      g->add_tweights(nodes[dists[i].first->f.first->info().id], 0, cost);
+      printf("end %d\n", dists[i].first->f.first->info().id);
+      //if (nodesOut[dists[i].first->f.first->info().id] == -1)
+      //nodesOut[dists[i].first->f.first->info().id] += cost;
+    } else {
+      g->add_tweights(nodes[d.mirror_facet(dists[i].first->f).first->info().id], 0, cost);
+      printf("end %d\n", d.mirror_facet(dists[i].first->f).first->info().id);
+      //if (nodesOut[d.mirror_facet(dists[i].first->f).first->info().id] == -1)
+      //nodesOut[d.mirror_facet(dists[i].first->f).first->info().id] += cost;
+    }
+  }
+}
+void iterateAllRays() {
+  DelaunayMesh::Delaunay &d = dm.d;
+
   nodes.resize(d.number_of_cells());
   nodesOut.resize(d.number_of_cells());
+  for (int i = 0; i < nodesOut.size(); i++) {
+    nodesOut[i] = 0;
+  }
 
 	g = new Graph();
 
@@ -272,120 +419,34 @@ void iterateAllRays() {
     set<int> &cams = it->info().cams;
     //printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
 
-    KPoint p1 = KPoint(p.x(), p.y(), p.z());
+    KPoint point = KPoint(p.x(), p.y(), p.z());
+    double cost = cams.size();
     for (int camId : cams) {
-      KPoint p0 = KPoint(camera[camId].at<double>(0, 0),
+      KPoint cam = KPoint(camera[camId].at<double>(0, 0),
           camera[camId].at<double>(1, 0),
           camera[camId].at<double>(2, 0));
 
-      double cameraToPointDist = DelaunayMesh::DistanceSquared(p0, p1);
-      Ray ray_query(p0, p1);
-      auto toCamera = p0 - p1;
-
-      std::list<IntersectReturn> inters;
-      dm.RayIntersect(ray_query, inters);
-
-      // Store intersected facets and its distance from the depth point.
-      vector<sortedFacets> dists;
-      for (auto &inter: inters) {
-
-        // Only retrieve point intersection here because segment intersection
-        // always has triangle's normal perpedicular to the ray.
-        if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
-          const DelaunayMesh::Facet &f = inter.second->f;
-          double dist = DelaunayMesh::DistanceSquared(*p, p0) - cameraToPointDist;
-          //printf(" tetra1: %d\n", f.first->info().id);
-          //printf(" tetra2: %d\n", d.mirror_facet(f).first->info().id);
-          //printf("%f %f %f\n", p->x(), p->y(), p->z());
-          //printf("%f\n", dist);
-          //cout << inter.first << endl;
-          //cout << f->first->info().id << endl;
-
-          //intersected.push_back(make_pair(f.first, f.second));
-          
-          //cout << " - " << f.second << ":" << b << endl;
-          //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
-          //printf("infinite %d\n", inf);
-          //printFacet(*f);
-          dists.push_back(make_pair(inter.second, dist));
-        } 
-      }
-      //printf("%d\n", camId);
-      sort(dists.begin(), dists.end(), Comparator::compare);
-
-      // ------ 0
-      auto &normal = dists[0].first->n;
-      // True iff normal and ray from point to camera are on the same side.
-      int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * normal.z() > 0;
-      int odd = dists[0].first->f.second % 2;
-
-      if (ss ^ !odd) {
-        g->add_tweights(nodes[dists[0].first->f.first->info().id], 100, 0);
-        //nodesOut[dists[0].first->f.first->info().id] = 0;
-        //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 1;
-      } else {
-        g->add_tweights(nodes[d.mirror_facet(dists[0].first->f).first->info().id], 100, 0);
-        //nodesOut[dists[0].first->f.first->info().id] = 1;
-        //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 0;
-      }
-      // ------ 0
-      //
-      int i;
-      for (i = 0; i < dists.size(); i++) {
-        if (dists[i].second == 0) {
-          while (i < dists.size() && dists[i].second == 0) 
-            i++;
-          break;
-        }
-        //printf("  %e %d\n", dists[i].second, dists[i].second == 0);
-        auto &f = dists[i].first->f; // Facet
-        auto &ch = f.first; // Cell handle 
-        const int &id = f.second; // Vertex id.
-
-        //auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
-        //int b = SameSide(diff, dists[i].first->n);
-        int inf = d.is_infinite(ch->vertex(id));
-
-
-        auto &normal = dists[i].first->n;
-        int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * normal.z() > 0;
-        int odd = dists[i].first->f.second % 2;
-
-        int id0 = dists[i].first->f.first->info().id;
-        int id1 = d.mirror_facet(dists[i].first->f).first->info().id;
-
-        if (ss ^ !odd) {
-          g->add_edge(nodes[id0], nodes[id1], 100, 0);
-        } else {
-          g->add_edge(nodes[id0], nodes[id1], 0, 100);
-        }
-        //printf("  %e %d\n", dists[i].second, b);
-      }
-      
-      if (i < dists.size()) {
-        auto &normal = dists[i].first->n;
-        // True iff normal and ray from point to camera are on the same side.
-        int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * normal.z() > 0;
-        int odd = dists[i].first->f.second % 2;
-
-        if (ss ^ !odd) {
-          g->add_tweights(nodes[dists[i].first->f.first->info().id], 0, 100);
-        } else {
-          g->add_tweights(nodes[d.mirror_facet(dists[i].first->f).first->info().id], 0, 100);
-        }
-      }
+      AssignCost(dm, point, cam, cost);
     }
   }
+
   printf("Solving min-cut\n");
-	Graph::flowtype flow = g -> maxflow();
+  Graph::flowtype flow = g -> maxflow();
   int count = 0;
   for (int i = 0; i < nodes.size(); i++) {
-    printf("%d %d\n", i, g->what_segment(nodes[i]) == Graph::SOURCE);
+    //printf("%d %d\n", i, g->what_segment(nodes[i]) == Graph::SOURCE);
     count += g->what_segment(nodes[i]) == Graph::SOURCE;
     nodesOut[i] = g->what_segment(nodes[i]) == Graph::SOURCE;
+    //nodesOut[i] = g->what_segment(nodes[i]) == Graph::SOURCE;
   }
   printf("count = %d, %d\n", count, nodes.size() - count);
   printf("flow = %f\n", flow);
+  //int i = 0;
+  //for (auto it = d.all_cells_begin(); it != d.all_cells_end(); it++, i++) {
+    //Cell_handle ch = it;
+    //if (d.is_infinite(ch))
+      //nodesOut[i] = 1; 
+  //}
 }
 
 void test3() {
@@ -411,10 +472,7 @@ void test3() {
     fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
-    if (i % 100 < 70) continue;
-
-    if (p[0] == 0 && p[1] == 0 && p[2] == 0)
-      exit(0);
+    if (i % 100 < 50) continue;
 
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
 
@@ -451,19 +509,28 @@ void test4() {
 
   DelaunayMesh::Delaunay &d = dm.d;
   camera.resize(2);
-  camera[0] = (Mat_<double>(3, 1) << 0, 0, 0);
-  camera[1] = (Mat_<double>(3, 1) << 1, 0, 0);
+  camera[0] = (Mat_<double>(3, 1) << 0.1, 0, 0);
+  camera[1] = (Mat_<double>(3, 1) << -0.1, 0, 0);
 
+  // Set 1
+  //dm.AddPoint(DPoint(0, 0, -3), VertexInfo(0, 1));
+  //dm.AddPoint(DPoint(0, 1, -4), VertexInfo(0, 1));
+  //dm.AddPoint(DPoint(1, -1, -4), VertexInfo(0, 1));
+  //dm.AddPoint(DPoint(-1, -1, -4), VertexInfo(0, 1));
+
+  //dm.AddPoint(DPoint(0, 1, -2), VertexInfo(0, 1));
+  //dm.AddPoint(DPoint(1, -1, -2), VertexInfo(0, 1));
+  //dm.AddPoint(DPoint(-1, -1, -2), VertexInfo(0, 1));
+
+  //dm.AddPoint(DPoint(1, -1, -1), VertexInfo(0, 1));
+
+  // Set 2
   dm.AddPoint(DPoint(0, 0, -3), VertexInfo(0, 1));
+  dm.AddPoint(DPoint(1, 0, -4), VertexInfo(0, 1));
   dm.AddPoint(DPoint(0, 1, -4), VertexInfo(0, 1));
-  dm.AddPoint(DPoint(1, -1, -4), VertexInfo(0, 1));
-  dm.AddPoint(DPoint(-1, -1, -4), VertexInfo(0, 1));
+  dm.AddPoint(DPoint(0, -1, -4), VertexInfo(0, 1));
+  dm.AddPoint(DPoint(-1, 0, -4), VertexInfo(0, 1));
 
-  dm.AddPoint(DPoint(0, 1, -2), VertexInfo(0, 1));
-  dm.AddPoint(DPoint(1, -1, -2), VertexInfo(0, 1));
-  dm.AddPoint(DPoint(-1, -1, -2), VertexInfo(0, 1));
-
-  dm.AddPoint(DPoint(1, -1, -1), VertexInfo(0, 1));
   dm.BuildAABBTree();
   dm.AssignTetrahedronIds();
 
@@ -474,85 +541,8 @@ void test4() {
     nodes[i] = g->add_node();
   }
 
-  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
-    auto p = it->point();
-    if (p.x() != 0 || p.y() != 0) continue;
-    printf("%f %f %f\n", p.x(), p.y(), p.z());
+  iterateAllRays();
 
-    //printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
-
-    KPoint p1 = KPoint(p.x(), p.y(), p.z());
-    KPoint p0 = KPoint(camera[0].at<double>(0, 0),
-        camera[0].at<double>(1, 0),
-        camera[0].at<double>(2, 0));
-
-    double cameraToPointDist = DelaunayMesh::DistanceSquared(p0, p1);
-    Ray ray_query(p0, p1);
-    auto toCamera = p0 - p1;
-
-    std::list<IntersectReturn> inters;
-    dm.RayIntersect(ray_query, inters);
-
-    vector<sortedFacets> dists;
-    // Store intersected facets and its distance from the depth point.
-    for (auto &inter: inters) {
-      if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
-        const DelaunayMesh::Facet &f = inter.second->f;
-        double dist = DelaunayMesh::DistanceSquared(*p, p0) - cameraToPointDist;
-        //printf(" tetra1: %d\n", f.first->info().id);
-        //printf(" tetra2: %d\n", d.mirror_facet(f).first->info().id);
-        //printf("%f %f %f\n", p->x(), p->y(), p->z());
-        //printf("%f\n", dist);
-        //cout << inter.first << endl;
-        //cout << f->first->info().id << endl;
-
-        //intersected.push_back(make_pair(f.first, f.second));
-
-        //cout << " - " << f.second << ":" << b << endl;
-        //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
-        //printf("infinite %d\n", inf);
-        //printFacet(*f);
-        dists.push_back(make_pair(inter.second, dist));
-      } 
-      printf("intersect id %d\n", inter.second->f.first->info().id);
-    }
-    sort(dists.begin(), dists.end(), Comparator::compare);
-
-
-    int i;
-    printf("toCamera %f %f %f\n", toCamera.x(), toCamera.y(), toCamera.z());
-    for (i = 0; i < dists.size(); i++) {
-      if (dists[i].second == 0) {
-        while (i < dists.size() && dists[i].second == 0) 
-          i++;
-        break;
-      }
-
-      auto &normal = dists[i].first->n;
-      printf("normal %f %f %f\n", normal.x(), normal.y(), normal.z());
-      int ss = toCamera.x() * normal.x() + toCamera.y() * normal.y() + toCamera.z() * normal.z() > 0;
-      int odd = dists[i].first->f.second % 2;
-
-      int id0 = dists[i].first->f.first->info().id;
-      int id1 = d.mirror_facet(dists[i].first->f).first->info().id;
-
-      printf("ss %d odd %d\n", ss, odd);
-      printFacet(dists[i].first->f);
-      printFacet(d.mirror_facet(dists[i].first->f));
-      if (ss ^ !odd) {
-        printf("f %d %d\n", id0, id1);
-        g->add_edge(nodes[id0], nodes[id1], 100, 0);
-      } else {
-        printf("b %d %d\n", id1, id0);
-        g->add_edge(nodes[id0], nodes[id1], 0, 100);
-      }
-      printf("  %f\n", dists[i].second);
-    }
-    if (i < dists.size()) {
-      printf("  %f\n", dists[i].second);
-    }
-    break;
-  }
 
   Viz::setDisplayCallback(display);
   Viz::setKeyboardCallback(keyboard2);

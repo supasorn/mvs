@@ -35,6 +35,8 @@ float Viz::fov = 5, Viz::oldFov;
 float Viz::normScale;
 float Viz::normTranslate[3];
 Mat Viz::textureMat;
+
+Vec3d px, py;
 void Viz::setLightPosition(double a, double b) {
   lang[0] = a;
   lang[1] = b;
@@ -187,6 +189,7 @@ void Viz::setMaterial(GLenum pname, float a) {
   float mat[4] = {a, a, a, a};
   glMaterialfv(GL_FRONT, pname, mat);
 }
+
 void Viz::updateProjection() {
   glMatrixMode (GL_PROJECTION);
   glLoadIdentity();
@@ -197,9 +200,15 @@ void Viz::updateProjection() {
   //glOrtho(-1, 1, -1, 1, -20, 20);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
-  cx = ox + mult * cos(ang[0]) * cos(ang[1]); 
-  cy = oy + mult * sin(ang[1]);
-  cz = oz + mult * sin(ang[0]) * cos(ang[1]);
+
+  Vec3d normal(cos(ang[0]) * cos(ang[1]), sin(ang[1]), sin(ang[0]) * cos(ang[1]));
+  px = Vec3d(0, 1, 0).cross(normal);
+  py = normal.cross(px);
+
+  cx = ox + mult * normal[0]; 
+  cy = oy + mult * normal[1];
+  cz = oz + mult * normal[2];
+
   gluLookAt(cx, cy, cz, ox, oy, oz, 0, cos(ang[1])>0?1:-1, 0);
 
   updateLight();
@@ -347,8 +356,12 @@ void Viz::mouseMoved(int x, int y) {
       cameraDistance = oldCameraDistance + (y-my) / 100.;
     }
   } else if (mouseButton = GLUT_MIDDLE_BUTTON) {
-    //ox = oox + (x - mx) / 20.0;
-    //oy = ooy + (y - my) / 20;
+    double s = 200;
+    double dx = (x - mx) / s;
+    double dy = -(y - my) / s;
+    ox = oox - px[0] * dx - py[0] * dy;
+    oy = ooy - px[1] * dx - py[1] * dy;
+    oz = ooz - px[2] * dx - py[2] * dy;
   }
   updateProjection();
 }
