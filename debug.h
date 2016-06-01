@@ -21,6 +21,18 @@ void addArrow(KPoint &a, KPoint &b) {
   _faces.push_back(Vec3i(base, base+1, base+2));
 }
 
+void addFacet(DelaunayMesh::Facet &f, int flag) {
+  int base = _points.size() + 1;
+  for (int i = 1; i <= 3; i++) {
+    auto v = f.first->vertex((f.second + i) % 4)->point();
+    _points.push_back(Vec3d(v.x(), v.y(), v.z()));
+  }
+  if ((f.second % 2) ^ flag)
+    _faces.push_back(Vec3i(base, base+2, base+1));
+  else
+    _faces.push_back(Vec3i(base, base+1, base+2));
+}
+
 void outObj() {
   FILE *fo = fopen("debug.obj", "w");
   for (int i = 0; i < _points.size(); i++) {

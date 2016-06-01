@@ -109,14 +109,16 @@ public:
 
   Delaunay d;
   Tree tree;
+  std::vector<FacetAndNormal> triangles;
+
 private:
   // If a new vertex is closer than merge_threshold to an existing vertex, 
   // merge the two vertices. Otherwise, add the new vertex into Delaunay.
   // TODO(supasorn): make a setter or option for this.
-  double merge_threshold = 0.00001;
+  //double merge_threshold = 0.00001;
+  double merge_threshold = 0.000001;
 
   // Triangle in AABB. This vector MUST persist throughout AABB usage. 
-  std::vector<FacetAndNormal> triangles;
 
 };
 

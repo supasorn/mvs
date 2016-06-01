@@ -7,6 +7,7 @@
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_triangle_primitive.h>
+#include <sys/time.h>
 
 #include <iostream>
 #include <set>
@@ -161,6 +162,7 @@ void init() {
   glEnable(GL_POINT_SMOOTH);
 
   glEnable (GL_BLEND);
+  glDisable(GL_CULL_FACE);
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
@@ -262,7 +264,28 @@ void test2() {
 //}
 
 inline int IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const DelaunayMesh::K::Vector_3 &b) {
-  return a.x() + b.x() + a.y() * b.y() + a.z() * b.z() > 0;
+  return a.x() * b.x() + a.y() * b.y() + a.z() * b.z() > 0;
+}
+
+int EqualZero(double &a) {
+  return abs(a) < 1e-10;
+}
+
+
+void getIncidentTetrahedrons(const DelaunayMesh::FacetAndNormal *f, const DelaunayMesh::Delaunay &d, int &id0, int &id1) {
+  id0 = f->f.first->info().id; 
+  id1 = d.mirror_facet(f->f).first->info().id;
+}
+
+void ExtractSurface() {
+  for (auto &triangle : dm.triangles) {
+    int id[2];
+    getIncidentTetrahedrons(&triangle, dm.d, id[0], id[1]);
+    if (nodesOut[id[0]] != nodesOut[id[1]]) {
+      addFacet(triangle.f, nodesOut[id[0]]);
+    }
+  }
+  outObj();
 }
 
 void AssignCost(DelaunayMesh &dm, KPoint &point, KPoint &camera, double cost) {
@@ -289,115 +312,49 @@ void AssignCost(DelaunayMesh &dm, KPoint &point, KPoint &camera, double cost) {
     if (const KPoint *p = boost::get<KPoint>(&(inter.first))) {
       const DelaunayMesh::Facet &f = inter.second->f;
       double dist = DelaunayMesh::DistanceSquared(*p, camera) - cameraToPointDist;
-      //printf(" tetra1: %d\n", f.first->info().id);
-      //printf(" tetra2: %d\n", d.mirror_facet(f).first->info().id);
-      //printf("%f %f %f\n", p->x(), p->y(), p->z());
-      //printf("%f\n", dist);
-      //cout << inter.first << endl;
-      //cout << f->first->info().id << endl;
-
-      //intersected.push_back(make_pair(f.first, f.second));
-
-      //cout << " - " << f.second << ":" << b << endl;
-      //printf("[%f %f %f]\n", tt.x(), tt.y(), tt.z());
-      //printf("infinite %d\n", inf);
-      //printFacet(*f);
       dists.push_back(make_pair(inter.second, dist));
     } 
   }
-  //printf("%d\n", camId);
   sort(dists.begin(), dists.end(), Comparator::compare);
 
-  // ------ 0
-  // True iff normal and ray from point to camera are on the same side.
-  int ss = IsSameSide(toCamera, dists[0].first->n);
-  int odd = dists[0].first->f.second % 2;
-  
-  printf("GT %d\n", d.locate(DelaunayMesh::K::Point_3(camera.x(), camera.y(), camera.z()))->info().id);
-  printf("retid %d, ss %d, od %d\n", dists[0].first->f.first->info().id, ss, odd);
-  if (!(ss ^ odd)) {
-    g->add_tweights(nodes[dists[0].first->f.first->info().id], cost, 0);
-    printf("first %d (%d)\n", dists[0].first->f.first->info().id, dists[0].first->f.second);
-    //nodesOut[dists[0].first->f.first->info().id] = 0;
-    //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 1;
-  } else {
-    g->add_tweights(nodes[d.mirror_facet(dists[0].first->f).first->info().id], cost, 0);
-    printf("first %d (%d)\n", d.mirror_facet(dists[0].first->f).first->info().id, d.mirror_facet(dists[0].first->f).second);
-    //nodesOut[dists[0].first->f.first->info().id] = 1;
-    //nodesOut[d.mirror_facet(dists[0].first->f).first->info().id] = 0;
-  }
-  //printFacet(dists[0].first->f);
-  //printFacet(d.mirror_facet(dists[0].first->f));
-  auto test = dists[0].first->f.first->vertex(3)->point() - dists[0].first->f.first->vertex(0)->point();
-  auto nn = dists[0].first->n;
-  printf("== %d\n", test.x() * nn.x() + test.y() * nn.y() + test.z() * nn.z() > 0);
-  addCell(dists[0].first->f.first);
-  addCell(d.mirror_facet(dists[0].first->f).first);
-  addArrow(camera, point);
-  //outObj();
-  //exit(0);
-  // ------ 0
-  //
-  int i;
-  for (i = 0; i < dists.size(); i++) {
-    if (dists[i].second == 0) {
-      while (i < dists.size() && dists[i].second == 0) 
-        i++;
-      break;
-    }
-    //printf("  %e %d\n", dists[i].second, dists[i].second == 0);
-    auto &f = dists[i].first->f; // Facet
-    auto &ch = f.first; // Cell handle 
-    const int &id = f.second; // Vertex id.
+  for (int i = 0; i < dists.size(); i++) {
+    if (EqualZero(dists[i].second)) continue;
 
-    //auto diff = ch->vertex(id)->point() - ch->vertex((id + 1) % 4)->point();
-    //int b = SameSide(diff, dists[i].first->n);
-    int inf = d.is_infinite(ch->vertex(id));
-
-
-    int id0 = dists[i].first->f.first->info().id;
-    int id1 = d.mirror_facet(dists[i].first->f).first->info().id;
-    addCell(dists[i].first->f.first);
-    addCell(d.mirror_facet(dists[i].first->f).first);
-
-    //printf("%d inf(%d)\n", id0, d.is_infinite(dists[i].first->f.first));
-    //printf("%d inf(%d)\n", id1, d.is_infinite(d.mirror_facet(dists[i].first->f).first));
-    int ss = IsSameSide(toCamera, dists[i].first->n);
-    int odd = dists[i].first->f.second % 2;
-    //if (ss ^ !odd) {
-    if (!(ss ^ odd)) {
-      g->add_edge(nodes[id0], nodes[id1], cost, 0);
-      printf("f %d (%d) -> %d (%d)  %f\n", id0, dists[i].first->f.second, id1, d.mirror_facet(dists[i].first->f).second, dists[i].second);
-    } else {
-      //g->add_edge(nodes[id0], nodes[id1], 0, cost);
-      g->add_edge(nodes[id1], nodes[id0], cost, 0);
-      printf("b %d (%d) -> %d (%d)  %f\n", id1, d.mirror_facet(dists[i].first->f).second, id0, dists[i].first->f.second, dists[i].second);
-    }
-    //nodesOut[id0] = 0;
-    //nodesOut[id1] = 0;
-
-    //printf("  %e %d\n", dists[i].second, b);
-  }
-
-  outObj();
-  exit(0);
-
-  if (i < dists.size()) {
+    int id[2];
+    getIncidentTetrahedrons(dists[i].first, d, id[0], id[1]);
     // True iff normal and ray from point to camera are on the same side.
     int ss = IsSameSide(toCamera, dists[i].first->n);
-    int odd = dists[i].first->f.second % 2;
-    if (!(ss ^ odd)) {
-      g->add_tweights(nodes[dists[i].first->f.first->info().id], 0, cost);
-      printf("end %d\n", dists[i].first->f.first->info().id);
-      //if (nodesOut[dists[i].first->f.first->info().id] == -1)
-      //nodesOut[dists[i].first->f.first->info().id] += cost;
-    } else {
-      g->add_tweights(nodes[d.mirror_facet(dists[i].first->f).first->info().id], 0, cost);
-      printf("end %d\n", d.mirror_facet(dists[i].first->f).first->info().id);
-      //if (nodesOut[d.mirror_facet(dists[i].first->f).first->info().id] == -1)
-      //nodesOut[d.mirror_facet(dists[i].first->f).first->info().id] += cost;
+
+    if (i == 0) {
+      g->add_tweights(nodes[id[!ss]], cost, 0);
+    }
+
+    if (dists[i].second < 0) {
+      g->add_edge(nodes[id[!ss]], nodes[id[ss]], cost, 0);
+    } else { 
+      g->add_tweights(nodes[id[!ss]], 0, cost);
+      break;
     }
   }
+  //outObj();
+  //exit(0);
+}
+
+double timestamp() {
+  timeval start; 
+  gettimeofday(&start, NULL);
+  return ((start.tv_sec) + start.tv_usec/1000000.0);
+}
+
+double CosineOfCircumsphere(DelaunayMesh::Facet f, DelaunayMesh::K::Vector_3 &normal) {
+  auto &ch = f.first;
+  auto center = CGAL::circumcenter(ch->vertex(0)->point(), ch->vertex(1)->point(), ch->vertex(2)->point(), ch->vertex(3)->point());
+  auto &p0 = ch->vertex((f.second + 1) % 4)->point();
+  auto radius = center - p0;
+  // This is dot product.
+  double height = normal * radius;
+  double length = sqrt(radius.squared_length()); 
+  return height / length;
 }
 void iterateAllRays() {
   DelaunayMesh::Delaunay &d = dm.d;
@@ -430,8 +387,24 @@ void iterateAllRays() {
     }
   }
 
+
+  for (auto &triangle : dm.triangles) {
+    double lambda = 10;
+    double surfaceQuality = lambda * (1 - min(
+        CosineOfCircumsphere(triangle.f, triangle.n), 
+        -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
+
+    int id[2];
+    getIncidentTetrahedrons(&triangle, d, id[0], id[1]);
+    g->add_edge(nodes[id[0]], nodes[id[1]], surfaceQuality, surfaceQuality);
+
+  }
+
   printf("Solving min-cut\n");
+  double start = timestamp();
   Graph::flowtype flow = g -> maxflow();
+  printf("Time %f\n", timestamp() - start);
+
   int count = 0;
   for (int i = 0; i < nodes.size(); i++) {
     //printf("%d %d\n", i, g->what_segment(nodes[i]) == Graph::SOURCE);
@@ -448,6 +421,7 @@ void iterateAllRays() {
       //nodesOut[i] = 1; 
   //}
 }
+
 
 void test3() {
   DelaunayMesh::Delaunay &d = dm.d;
@@ -492,6 +466,7 @@ void test3() {
   dm.AssignTetrahedronIds();
 
   iterateAllRays();
+  ExtractSurface();
 
   Viz::setDisplayCallback(display);
   Viz::setKeyboardCallback(keyboard2);

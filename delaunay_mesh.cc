@@ -40,7 +40,9 @@ DelaunayMesh::FacetAndNormal::FacetAndNormal(Facet f) {
   auto v10 = v1 - v0;
   auto v21 = v2 - v1;
   n = CGAL::cross_product(v10, v21);
-  //n = n / sqrt(n.squared_length());
+  n = n / sqrt(n.squared_length());
+  if (f.second % 2 == 0)
+    n = -n;
 }
 
 // Utility function to convert a custom point type to CGAL point type.
