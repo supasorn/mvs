@@ -13,6 +13,7 @@
 #include <CGAL/Triangulation_vertex_base_with_info_3.h>
 #include <set>
 
+#include "maxflow/v2_adjacency_list/graph.h"
 // This class is used to perform mesh extraction. The input is a set of point cloud.
 // Each point has a world-coordinate and a list of camera visible from that point.
 // The output is a visibility-consistent triangle mesh. 
@@ -95,6 +96,7 @@ public:
   typedef Tree::Primitive_id Primitive_id;
   typedef TrianglePrimitive::Point Point;
   typedef TrianglePrimitive::Datum Datum;
+  typedef Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type IntersectReturn;
 
   // Adds depth point to the Delaunay.
   void AddPoint(const Delaunay::Point &p, const VertexInfo &vi);
@@ -103,12 +105,14 @@ public:
   int BuildAABBTree();
   void RayIntersect(const DelaunayMesh::KSC::Ray_3 &ray, std::list<Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type> &intersections);
   int AssignTetrahedronIds();
-
-  template <typename T>
-  static double DistanceSquared(const T &p0, const T &p1);
+  void ExtractSurface(std::vector<Point> &camera);
+  void getIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
+  int IsInsideSurface(int id);
 
   Delaunay d;
   Tree tree;
+
+  // Triangle in AABB. This vector MUST persist throughout AABB usage. 
   std::vector<FacetAndNormal> triangles;
 
 private:
@@ -116,10 +120,15 @@ private:
   // merge the two vertices. Otherwise, add the new vertex into Delaunay.
   // TODO(supasorn): make a setter or option for this.
   //double merge_threshold = 0.00001;
-  double merge_threshold = 0.000001;
+  double merge_threshold = 0.00005;
+  //double merge_threshold = 0.000001;
 
-  // Triangle in AABB. This vector MUST persist throughout AABB usage. 
+  std::vector<Graph::node_id> nodes;
+  Graph *g;
 
+  inline int IsSameSide(KSC::Vector_3 &a, const K::Vector_3 &b);
+  int EqualZero(double &a);
+  void AssignCost(Point &point, Point &camera, double cost); 
 };
 
 #endif
