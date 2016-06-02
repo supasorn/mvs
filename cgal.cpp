@@ -163,45 +163,12 @@ void init() {
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-
-void RebuildTree() {
-  dm.BuildAABBTree();
-
-  Ray ray_query(p0 ,p1);
-
-
-  std::list<IntersectReturn> inters;
-  dm.RayIntersect(ray_query, inters);
-
-  intersected.clear();
-  for (auto &inter : inters) {
-    if (boost::get<KPoint>(&(inter.first))) {
-      printf("point\n");
-      const DelaunayMesh::Facet *f = &inter.second->f;
-
-      cout << inter.first << endl;
-      cout << f->first->info().id << endl;
-      intersected.push_back(make_pair(f->first, f->second));
-    } else if (boost::get<Segment>(&(inter.first))) {
-      printf("segment\n");
-      cout << inter.first;
-      cout << inter.second->f.first->info().id << endl;
-    }
-  }
-
-  /*
-  for (auto i = primitives.begin(); i != primitives.end(); i++) {
-    auto triangle = *i;
-    intersected.push_back(make_pair(triangle->first, triangle->second));
-  }*/
-
-}
 void keyboard2(unsigned char key, int x, int y) {
   DelaunayMesh::Delaunay &d = dm.d;
   if (key == 'a') {
     float c = 0.5;
     dm.AddPoint(DPoint(rand1(c), rand1(c), rand1(c)), VertexInfo());
-    RebuildTree();
+    //RebuildTree();
   }
 }
 void test2() {
@@ -229,7 +196,7 @@ void test2() {
   }
 
 
-  RebuildTree();
+  //RebuildTree();
 
   /*
   KPoint p0(0.1, 0.1, 0.1);
@@ -265,7 +232,7 @@ void test2() {
 void ExtractSurface() {
   for (auto &triangle : dm.triangles) {
     int id[2];
-    dm.getIncidentTetrahedrons(&triangle, id[0], id[1]);
+    dm.GetIncidentTetrahedrons(&triangle, id[0], id[1]);
     if (nodesOut[id[0]] != nodesOut[id[1]]) {
       addFacet(triangle.f, nodesOut[id[0]]);
     }
@@ -301,7 +268,7 @@ void test3() {
     fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
-    if (i % 100 < 90) continue;
+    if (i % 100 < 50) continue;
 
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
 

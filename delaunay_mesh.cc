@@ -65,11 +65,6 @@ int DelaunayMesh::BuildAABBTree() {
   return triangles.size();
 }
 
-void DelaunayMesh::RayIntersect(const DelaunayMesh::KSC::Ray_3 &ray, std::list<Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type> &intersections) {
-  tree.all_intersections(ray, std::back_inserter(intersections));
-
-}
-
 // Assigns IDs to all tetrahedrons after Delaunay is complete. Returns number of cells.
 int DelaunayMesh::AssignTetrahedronIds() {
   int idCount = 0;
@@ -83,76 +78,77 @@ inline int DelaunayMesh::IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const Delaun
     return a.x() * b.x() + a.y() * b.y() + a.z() * b.z() > 0;
 }
 
-int DelaunayMesh::EqualZero(double &a) {
-  return std::abs(a) < 1e-10;
-}
-
 void DelaunayMesh::AddCostUnary(int id0, double src, double snk) {
+  omp_set_lock(&lock[id0]);
   cost_unary[id0].first += src;
   cost_unary[id0].second += snk;
+  omp_unset_lock(&lock[id0]);
 }
 
 void DelaunayMesh::AddCostBinary(int id0, int id1, double cost0, double cost1) {
+  omp_set_lock(&lock[id0]);
   if (cost_binary[id0].find(id1) == cost_binary[id0].end())
     cost_binary[id0][id1] = cost0;
   else
     cost_binary[id0][id1] += cost0;
+  omp_unset_lock(&lock[id0]);
 
+  omp_set_lock(&lock[id1]);
   if (cost_binary[id1].find(id0) == cost_binary[id1].end())
     cost_binary[id1][id0] = cost1;
   else
     cost_binary[id1][id0] += cost1;
+  omp_unset_lock(&lock[id1]);
 }
 
 void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   typedef std::pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
-  struct Comparator {
-    static bool compare(sortedFacets &a, sortedFacets &b) { return a.second < b.second; }
-  };
 
   double cameraToPointDist = (camera - point).squared_length();
   KSC::Ray_3 ray_query(camera, point);
   auto toCamera = camera - point;
 
   std::list<IntersectReturn> inters;
-  RayIntersect(ray_query, inters);
+  tree.all_intersections(ray_query, std::back_inserter(inters));
 
-  // Store intersected facets and its distance from the depth point.
-  std::vector<sortedFacets> dists;
+  const FacetAndNormal* minFacet[2] = {0, 0};
+  double minVal[2] = {1e10, 1e10};
+  int id[2];
   for (auto &inter: inters) {
-
     // Only retrieve point intersection here because segment intersection
     // always has triangle's normal perpedicular to the ray.
     if (const Point *p = boost::get<Point>(&(inter.first))) {
       const DelaunayMesh::Facet &f = inter.second->f;
       double dist = (*p - camera).squared_length() - cameraToPointDist;
-      dists.push_back(std::make_pair(inter.second, dist));
+      if (std::abs(dist) < 1e-10) continue;
+
+      if (dist > 0) {
+        if (!minFacet[0] || dist < minVal[0]) {
+          minFacet[0] = inter.second;
+          minVal[0] = dist;
+        }
+      } else {
+        if (!minFacet[1] || dist < minVal[1]) {
+          minFacet[1] = inter.second;
+          minVal[1] = dist;
+        }
+        GetIncidentTetrahedrons(inter.second, id[0], id[1]);
+        // True iff normal and ray from point to camera are on the same side.
+        int ss = IsSameSide(toCamera, inter.second->n);
+        AddCostBinary(id[!ss], id[ss], cost, 0);
+      }
     } 
   }
-  sort(dists.begin(), dists.end(), Comparator::compare);
 
-  for (int i = 0; i < dists.size(); i++) {
-    if (EqualZero(dists[i].second)) continue;
-
-    int id[2];
-    getIncidentTetrahedrons(dists[i].first, id[0], id[1]);
-    // True iff normal and ray from point to camera are on the same side.
-    int ss = IsSameSide(toCamera, dists[i].first->n);
-
-    if (i == 0) {
-      AddCostUnary(id[!ss], cost, 0);
-    }
-
-    if (dists[i].second < 0) {
-      AddCostBinary(id[!ss], id[ss], cost, 0);
-    } else { 
-      AddCostUnary(id[!ss], 0, cost);
-      break;
+  for (int i = 0; i < 2; i++) {
+    if (minFacet[i]) {
+      GetIncidentTetrahedrons(minFacet[i], id[0], id[1]);
+      AddCostUnary(id[!IsSameSide(toCamera, minFacet[i]->n)], i * cost, (1 - i) * cost);
     }
   }
 }
 
-void DelaunayMesh::getIncidentTetrahedrons(const DelaunayMesh::FacetAndNormal *f, int &id0, int &id1) {
+void DelaunayMesh::GetIncidentTetrahedrons(const DelaunayMesh::FacetAndNormal *f, int &id0, int &id1) {
   id0 = f->f.first->info().id; 
   id1 = d.mirror_facet(f->f).first->info().id;
 }
@@ -162,7 +158,7 @@ void DelaunayMesh::SaveObj(std::string name) {
   std::vector<Eigen::Vector3i> _faces;
   for (auto &triangle : triangles) {
     int id[2];
-    getIncidentTetrahedrons(&triangle, id[0], id[1]);
+    GetIncidentTetrahedrons(&triangle, id[0], id[1]);
     if (IsInsideSurface(id[0]) != IsInsideSurface(id[1])) {
       auto &f = triangle.f;
       int base = _points.size() + 1;
@@ -215,16 +211,24 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   nodes.resize(d.number_of_cells());
   cost_unary.resize(d.number_of_cells());
   cost_binary.resize(d.number_of_cells());
+  lock.resize(d.number_of_cells());
 
 	g = new Graph();
   for (int i = 0; i < nodes.size(); i++) {
     nodes[i] = g->add_node();
+    omp_init_lock(&lock[i]);
   }
 
+  double t = timestamp();
+  std::vector<Vertex_handle> vs;
   for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
-    auto p = it->point();
-    std::set<int> &cams = it->info().cams;
-    //printf("%f %f %f %d\n", p.x(), p.y(), p.z(), cams.size());
+    vs.push_back(it);
+  }
+
+#pragma omp parallel for
+  for (int i = 0; i < vs.size(); i++) {
+    auto p = vs[i]->point();
+    std::set<int> &cams = vs[i]->info().cams;
 
     Point point = Point(p.x(), p.y(), p.z());
     double cost = cams.size();
@@ -232,6 +236,20 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
       AssignCost(point, camera[camId], cost);
     }
   }
+
+  /*
+  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
+    auto p = it->point();
+    std::set<int> &cams = it->info().cams;
+
+    Point point = Point(p.x(), p.y(), p.z());
+    double cost = cams.size();
+    for (int camId : cams) {
+      AssignCost(point, camera[camId], cost);
+    }
+  }*/
+  printf("Construct graph %f\n", timestamp() - t);
+
 
   for (auto &triangle : triangles) {
     // Surface quality. Higher -> smoother.
@@ -241,7 +259,7 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
 
     int id[2];
-    getIncidentTetrahedrons(&triangle, id[0], id[1]);
+    GetIncidentTetrahedrons(&triangle, id[0], id[1]);
     AddCostBinary(id[0], id[1], surfaceQuality, surfaceQuality);
   }
 

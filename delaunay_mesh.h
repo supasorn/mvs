@@ -16,6 +16,7 @@
 #include <set>
 #include <sys/time.h>
 #include <time.h>
+#include "omp.h"
 
 #include "maxflow/v2_adjacency_list/graph.h"
 // This class is used to perform mesh extraction. The input is a set of point cloud.
@@ -50,6 +51,7 @@ public:
   typedef CGAL::Triangulation_data_structure_3<Vb, Cb> Tds;
   typedef CGAL::Delaunay_triangulation_3<K, Tds> Delaunay;
   typedef DelaunayMesh::Tds::Cell_handle Cell_handle;
+  typedef DelaunayMesh::Tds::Vertex_handle Vertex_handle;
   typedef DelaunayMesh::Delaunay::Point   DPoint;
   typedef Delaunay::Facet Facet;
 
@@ -106,11 +108,8 @@ public:
   void AddPoint(const Delaunay::Point &p, const VertexInfo &vi);
 
   // Builds AABB tree for fast ray intersection. Return the number of triangles.
-  int BuildAABBTree();
-  void RayIntersect(const DelaunayMesh::KSC::Ray_3 &ray, std::list<Tree::Intersection_and_primitive_id<KSC::Ray_3>::Type> &intersections);
-  int AssignTetrahedronIds();
   void ExtractSurface(std::vector<Point> &camera);
-  void getIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
+  void GetIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
   int IsInsideSurface(int id);
   void SaveObj(std::string name);
 
@@ -133,12 +132,14 @@ private:
 
   std::vector<std::map<int, double> > cost_binary;
   std::vector<std::pair<double, double> > cost_unary;
+  std::vector<omp_lock_t> lock;
 
   void AddCostUnary(int id0, double src, double snk);
   void AddCostBinary(int id0, int id1, double cost0, double cost1);
   inline int IsSameSide(KSC::Vector_3 &a, const K::Vector_3 &b);
-  int EqualZero(double &a);
   void AssignCost(Point &point, Point &camera, double cost); 
+  int BuildAABBTree();
+  int AssignTetrahedronIds();
 };
 
 #endif
