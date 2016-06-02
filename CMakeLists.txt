@@ -11,14 +11,17 @@ SET(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -lpthread -pthread")
 #add_definitions(-D__UBUNTU__)
 add_definitions(-std=c++11)
 #FIND_PACKAGE(CUDA)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 SET(CUDA_NVCC_FLAGS "-arch=sm_20")
 SET(OSBASE "/home/supasorn")
+
 message(${CMAKE_SYSTEM_VERSION})
 message(${CMAKE_CURRENT_SOURCE_DIR})
 
 #FIND_PACKAGE(Ceres 1.8 REQUIRED)
 find_package( CGAL QUIET COMPONENTS  )
+
 IF(APPLE)
   FIND_LIBRARY(GLUT GLUT)
   FIND_LIBRARY(GL OpenGL)
@@ -33,11 +36,11 @@ include( CGAL_CreateSingleSourceCGALProgram )
 find_package( Boost REQUIRED )
 
 set(MIN_EIGEN_VERSION 3.2.0)
-find_package(Eigen3 ${MIN_EIGEN_VERSION} REQUIRED)
+find_package(Eigen ${MIN_EIGEN_VERSION} REQUIRED)
 if (EIGEN_FOUND)
   message("-- Found Eigen version ${EIGEN_VERSION}: ${EIGEN_INCLUDE_DIRS}")
 endif (EIGEN_FOUND)
-include_directories(${EIGEN_INCLUDE_DIRS})
+include_directories(SYSTEM ${EIGEN_INCLUDE_DIRS})
 
 message("OPENCV: ${OpenCV_VERSION}")
 #link_directories(/usr/lib64 ${PCL_LIBRARY_DIRS})

@@ -87,6 +87,9 @@ int DelaunayMesh::EqualZero(double &a) {
   return std::abs(a) < 1e-10;
 }
 
+std::vector<std::map<int, double> > edge;
+std::vector<std::pair<double, double> > scsk;
+
 void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   typedef std::pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
   struct Comparator {
@@ -127,7 +130,16 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
     }
 
     if (dists[i].second < 0) {
-      g->add_edge(nodes[id[!ss]], nodes[id[ss]], cost, 0);
+      //g->add_edge(nodes[id[!ss]], nodes[id[ss]], cost, 0);
+      
+      if (edge[id[!ss]].find(id[ss]) != edge[id[!ss]].end())
+        edge[id[!ss]][id[ss]] += cost;
+      else
+        edge[id[!ss]][id[ss]] = cost;
+
+      if (edge[id[ss]].find(id[!ss]) == edge[id[ss]].end())
+        edge[id[ss]][id[!ss]] = 0;
+
     } else { 
       g->add_tweights(nodes[id[!ss]], 0, cost);
       break;
@@ -196,6 +208,8 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   AssignTetrahedronIds();
 
   nodes.resize(d.number_of_cells());
+  scsk.resize(d.number_of_cells());
+  edge.resize(d.number_of_cells());
 
 	g = new Graph();
   for (int i = 0; i < nodes.size(); i++) {
@@ -213,11 +227,22 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
       AssignCost(point, camera[camId], cost);
     }
   }
+  
+  
+  
+  for (int i = 0; i < nodes.size(); i++) {
+    for (auto const &k : edge[i]) {
+      if (k.first > i) {
+        g->add_edge(nodes[i], nodes[k.first], edge[i][k.first], edge[k.first][i]);
+        //printf("%d -> %d %f %f\n", i, k.first,edge[i][k.first], edge[k.first][i]);
+      }
+    }
+  }
 
 
   for (auto &triangle : triangles) {
     // Surface quality. Higher -> smoother.
-    double lambda = 20;
+    double lambda = 4;
     double surfaceQuality = lambda * (1 - std::min(
         CosineOfCircumsphere(triangle.f, triangle.n), 
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
