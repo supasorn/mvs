@@ -13,6 +13,8 @@
 #include "delaunay_mesh.h"
 #include "viz.h"
 #include "maxflow/v2_adjacency_list/graph.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 DelaunayMesh dm;
 using namespace std;
@@ -268,7 +270,7 @@ void test3() {
     fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
-    if (i % 100 < 50) continue;
+    //if (i % 100 < 50) continue;
 
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
 
@@ -327,7 +329,9 @@ void testGraph() {
   exit(0);
 	delete g;
 }
-int main() {
+int main(int argc, char** argv) {
+  google::ParseCommandLineFlags(&argc, &argv, false);
+  google::InitGoogleLogging(argv[0]);
   //testGraph();
   //test2();
   test3();

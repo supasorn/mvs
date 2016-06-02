@@ -220,11 +220,13 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   }
 
   double t = timestamp();
-  std::vector<Vertex_handle> vs;
-  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
-    vs.push_back(it);
-  }
+  std::vector<Vertex_handle> vs(d.number_of_vertices());
+  auto vit = vs.begin();
+  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++, vit++) 
+    *vit = it;
 
+  //LOG(INFO) << "Constructing Graph\n";
+  printf("  Surface Visibility ... "); fflush(stdout);
 #pragma omp parallel for
   for (int i = 0; i < vs.size(); i++) {
     auto p = vs[i]->point();
@@ -236,24 +238,15 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
       AssignCost(point, camera[camId], cost);
     }
   }
-
-  /*
-  for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++) {
-    auto p = it->point();
-    std::set<int> &cams = it->info().cams;
-
-    Point point = Point(p.x(), p.y(), p.z());
-    double cost = cams.size();
-    for (int camId : cams) {
-      AssignCost(point, camera[camId], cost);
-    }
-  }*/
-  printf("Construct graph %f\n", timestamp() - t);
+  printf("Done %f\n", timestamp() - t);
 
 
+  printf("  Surface Quality ... "); fflush(stdout);
+  t = timestamp();
   for (auto &triangle : triangles) {
     // Surface quality. Higher -> smoother.
-    double lambda = 2;
+    //double lambda = 0.5;
+    double lambda = 0;
     double surfaceQuality = lambda * (1 - std::min(
         CosineOfCircumsphere(triangle.f, triangle.n), 
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
@@ -262,6 +255,7 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
     GetIncidentTetrahedrons(&triangle, id[0], id[1]);
     AddCostBinary(id[0], id[1], surfaceQuality, surfaceQuality);
   }
+  printf("Done %f\n", timestamp() - t);
 
   for (int i = 0; i < nodes.size(); i++) {
     for (auto const &k : cost_binary[i]) {
@@ -274,11 +268,13 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
     g->add_tweights(nodes[i], cost_unary[i].first, cost_unary[i].second);
   }
 
-  printf("Solving min-cut\n");
-  double start = timestamp();
+  printf("Solving min-cut ... "); fflush(stdout);
+  t = timestamp();
   Graph::flowtype flow = g->maxflow();
+  printf("Done %f\n", timestamp() - t);
   printf("flow = %lf\n", flow);
-  printf("done\n");
-  printf("Time %f\n", timestamp() - start);
 
+  for (int i = 0; i < nodes.size(); i++) {
+    omp_destroy_lock(&lock[i]);
+  }
 }

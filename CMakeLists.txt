@@ -39,10 +39,9 @@ find_package( Boost REQUIRED )
 
 set(MIN_EIGEN_VERSION 3.2.0)
 find_package(Eigen ${MIN_EIGEN_VERSION} REQUIRED)
-if (EIGEN_FOUND)
-  message("-- Found Eigen version ${EIGEN_VERSION}: ${EIGEN_INCLUDE_DIRS}")
-endif (EIGEN_FOUND)
-include_directories(SYSTEM ${EIGEN_INCLUDE_DIRS})
+find_package(Gflags REQUIRED)
+
+include_directories(SYSTEM ${EIGEN_INCLUDE_DIRS} ${GLOG_INCLUDE_DIRS})
 
 message("OPENCV: ${OpenCV_VERSION}")
 #link_directories(/usr/lib64 ${PCL_LIBRARY_DIRS})
@@ -77,4 +76,4 @@ add_library (raster ../research/utils/raster.cpp)
 #target_link_libraries (generatefeature ceres utilities libviz ply.so) 
 
 add_executable (cgal cgal.cpp delaunay_mesh.cc)
-target_link_libraries (cgal ceres libviz maxflow ${EXTRA_LIBS} ${OpenCV_LIBS}) 
+target_link_libraries (cgal ceres libviz maxflow ${EXTRA_LIBS} ${OpenCV_LIBS} glog) 

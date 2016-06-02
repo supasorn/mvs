@@ -12,7 +12,8 @@
 #include <CGAL/Triangulation_cell_base_with_info_3.h>
 #include <CGAL/Triangulation_vertex_base_with_info_3.h>
 #include <Eigen/Core>
-//#include <eigen3/Eigen/Dense>
+#include <glog/logging.h>
+
 #include <set>
 #include <sys/time.h>
 #include <time.h>
@@ -125,7 +126,7 @@ private:
   // TODO(supasorn): make a setter or option for this.
   //double merge_threshold = 0.00001;
   //double merge_threshold = 0.00005;
-  double merge_threshold = 0.000001;
+  double merge_threshold = 0.0000001;
 
   std::vector<Graph::node_id> nodes;
   Graph *g;
