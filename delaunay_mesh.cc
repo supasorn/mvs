@@ -87,8 +87,22 @@ int DelaunayMesh::EqualZero(double &a) {
   return std::abs(a) < 1e-10;
 }
 
-std::vector<std::map<int, double> > edge;
-std::vector<std::pair<double, double> > scsk;
+void DelaunayMesh::AddCostUnary(int id0, double src, double snk) {
+  cost_unary[id0].first += src;
+  cost_unary[id0].second += snk;
+}
+
+void DelaunayMesh::AddCostBinary(int id0, int id1, double cost0, double cost1) {
+  if (cost_binary[id0].find(id1) == cost_binary[id0].end())
+    cost_binary[id0][id1] = cost0;
+  else
+    cost_binary[id0][id1] += cost0;
+
+  if (cost_binary[id1].find(id0) == cost_binary[id1].end())
+    cost_binary[id1][id0] = cost1;
+  else
+    cost_binary[id1][id0] += cost1;
+}
 
 void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   typedef std::pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
@@ -126,22 +140,13 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
     int ss = IsSameSide(toCamera, dists[i].first->n);
 
     if (i == 0) {
-      g->add_tweights(nodes[id[!ss]], cost, 0);
+      AddCostUnary(id[!ss], cost, 0);
     }
 
     if (dists[i].second < 0) {
-      //g->add_edge(nodes[id[!ss]], nodes[id[ss]], cost, 0);
-      
-      if (edge[id[!ss]].find(id[ss]) != edge[id[!ss]].end())
-        edge[id[!ss]][id[ss]] += cost;
-      else
-        edge[id[!ss]][id[ss]] = cost;
-
-      if (edge[id[ss]].find(id[!ss]) == edge[id[ss]].end())
-        edge[id[ss]][id[!ss]] = 0;
-
+      AddCostBinary(id[!ss], id[ss], cost, 0);
     } else { 
-      g->add_tweights(nodes[id[!ss]], 0, cost);
+      AddCostUnary(id[!ss], 0, cost);
       break;
     }
   }
@@ -208,8 +213,8 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   AssignTetrahedronIds();
 
   nodes.resize(d.number_of_cells());
-  scsk.resize(d.number_of_cells());
-  edge.resize(d.number_of_cells());
+  cost_unary.resize(d.number_of_cells());
+  cost_binary.resize(d.number_of_cells());
 
 	g = new Graph();
   for (int i = 0; i < nodes.size(); i++) {
@@ -227,30 +232,28 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
       AssignCost(point, camera[camId], cost);
     }
   }
-  
-  
-  
-  for (int i = 0; i < nodes.size(); i++) {
-    for (auto const &k : edge[i]) {
-      if (k.first > i) {
-        g->add_edge(nodes[i], nodes[k.first], edge[i][k.first], edge[k.first][i]);
-        //printf("%d -> %d %f %f\n", i, k.first,edge[i][k.first], edge[k.first][i]);
-      }
-    }
-  }
-
 
   for (auto &triangle : triangles) {
     // Surface quality. Higher -> smoother.
-    double lambda = 4;
+    double lambda = 2;
     double surfaceQuality = lambda * (1 - std::min(
         CosineOfCircumsphere(triangle.f, triangle.n), 
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
 
     int id[2];
     getIncidentTetrahedrons(&triangle, id[0], id[1]);
-    g->add_edge(nodes[id[0]], nodes[id[1]], surfaceQuality, surfaceQuality);
+    AddCostBinary(id[0], id[1], surfaceQuality, surfaceQuality);
+  }
 
+  for (int i = 0; i < nodes.size(); i++) {
+    for (auto const &k : cost_binary[i]) {
+      if (k.first > i) {
+        g->add_edge(nodes[i], nodes[k.first], cost_binary[i][k.first], cost_binary[k.first][i]);
+      }
+    }
+  }
+  for (int i = 0; i < nodes.size(); i++) {
+    g->add_tweights(nodes[i], cost_unary[i].first, cost_unary[i].second);
   }
 
   printf("Solving min-cut\n");

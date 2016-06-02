@@ -131,6 +131,11 @@ private:
   std::vector<Graph::node_id> nodes;
   Graph *g;
 
+  std::vector<std::map<int, double> > cost_binary;
+  std::vector<std::pair<double, double> > cost_unary;
+
+  void AddCostUnary(int id0, double src, double snk);
+  void AddCostBinary(int id0, int id1, double cost0, double cost1);
   inline int IsSameSide(KSC::Vector_3 &a, const K::Vector_3 &b);
   int EqualZero(double &a);
   void AssignCost(Point &point, Point &camera, double cost); 
