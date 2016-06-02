@@ -84,7 +84,7 @@ inline int DelaunayMesh::IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const Delaun
 }
 
 int DelaunayMesh::EqualZero(double &a) {
-  return abs(a) < 1e-10;
+  return std::abs(a) < 1e-10;
 }
 
 void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
@@ -128,18 +128,46 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
 
     if (dists[i].second < 0) {
       g->add_edge(nodes[id[!ss]], nodes[id[ss]], cost, 0);
-      //printf("%d -> %d\n", id[!ss], id[ss]);
     } else { 
       g->add_tweights(nodes[id[!ss]], 0, cost);
       break;
     }
   }
-  //outObj();
-  //exit(0);
 }
+
 void DelaunayMesh::getIncidentTetrahedrons(const DelaunayMesh::FacetAndNormal *f, int &id0, int &id1) {
   id0 = f->f.first->info().id; 
   id1 = d.mirror_facet(f->f).first->info().id;
+}
+
+void DelaunayMesh::SaveObj(std::string name) {
+  std::vector<DPoint> _points;
+  std::vector<Eigen::Vector3i> _faces;
+  for (auto &triangle : triangles) {
+    int id[2];
+    getIncidentTetrahedrons(&triangle, id[0], id[1]);
+    if (IsInsideSurface(id[0]) != IsInsideSurface(id[1])) {
+      auto &f = triangle.f;
+      int base = _points.size() + 1;
+      for (int i = 1; i <= 3; i++) {
+        auto v = f.first->vertex((f.second + i) % 4)->point();
+        _points.push_back(v);
+      }
+      if ((f.second % 2) ^ IsInsideSurface(id[0]))
+        _faces.push_back(Eigen::Vector3i(base, base+1, base+2));
+      else
+        _faces.push_back(Eigen::Vector3i(base, base+2, base+1));
+
+    }
+  }
+  FILE *fo = fopen(name.c_str(), "w");
+  for (int i = 0; i < _points.size(); i++) {
+    fprintf(fo, "v %lf %lf %lf\n", _points[i][0], _points[i][1], _points[i][2]);
+  }
+  for (int i = 0; i < _faces.size(); i++) { 
+    fprintf(fo, "f %d %d %d\n", _faces[i][0], _faces[i][1], _faces[i][2]);
+  }
+  fclose(fo);
 }
 
 double CosineOfCircumsphere(DelaunayMesh::Facet f, DelaunayMesh::K::Vector_3 &normal) {
@@ -154,7 +182,7 @@ double CosineOfCircumsphere(DelaunayMesh::Facet f, DelaunayMesh::K::Vector_3 &no
 }
 
 int DelaunayMesh::IsInsideSurface(int id) {
-  return g->what_segment(nodes[id]) == Graph::SOURCE;
+  return g->what_segment(nodes[id]) == Graph::SINK;
 }
 
 double timestamp() {
@@ -188,7 +216,8 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
 
 
   for (auto &triangle : triangles) {
-    double lambda = 10;
+    // Surface quality. Higher -> smoother.
+    double lambda = 20;
     double surfaceQuality = lambda * (1 - std::min(
         CosineOfCircumsphere(triangle.f, triangle.n), 
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
@@ -202,17 +231,8 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   printf("Solving min-cut\n");
   double start = timestamp();
   Graph::flowtype flow = g->maxflow();
-  printf("flow = %f\n", flow);
+  printf("flow = %lf\n", flow);
   printf("done\n");
   printf("Time %f\n", timestamp() - start);
 
-  //int count = 0;
-  //for (int i = 0; i < nodes.size(); i++) {
-    //printf("%d %d\n", i, g->what_segment(nodes[i]) == Graph::SOURCE);
-    //count += g->what_segment(nodes[i]) == Graph::SOURCE;
-    //nodesOut[i] = g->what_segment(nodes[i]) == Graph::SOURCE;
-    //nodesOut[i] = g->what_segment(nodes[i]) == Graph::SOURCE;
-  //}
-  //printf("count = %d, %d\n", count, nodes.size() - count);
-  //printf("flow = %f\n", flow);
 }

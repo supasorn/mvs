@@ -7,7 +7,6 @@
 #include <CGAL/AABB_tree.h>
 #include <CGAL/AABB_traits.h>
 #include <CGAL/AABB_triangle_primitive.h>
-#include <sys/time.h>
 
 #include <iostream>
 #include <set>
@@ -316,10 +315,14 @@ void test3() {
   //iterateAllRays();
   dm.ExtractSurface(camera);
   nodesOut.resize(dm.d.number_of_cells());
+  int count = 0;
   for (int i = 0; i < nodesOut.size(); i++) {
     nodesOut[i] = dm.IsInsideSurface(i);
+    count += nodesOut[i]; 
     //printf("%d\n", nodesOut[i]);
   }
+  printf("count = %d, %d\n", count, nodesOut.size() - count);
+  dm.SaveObj("debug2.obj");
 
 
   //ExtractSurface();
@@ -359,7 +362,6 @@ void testGraph() {
 }
 int main() {
   //testGraph();
-  //testRay();
   //test2();
   test3();
   //test4();

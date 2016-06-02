@@ -32,6 +32,12 @@ include( CGAL_CreateSingleSourceCGALProgram )
 
 find_package( Boost REQUIRED )
 
+set(MIN_EIGEN_VERSION 3.2.0)
+find_package(Eigen3 ${MIN_EIGEN_VERSION} REQUIRED)
+if (EIGEN_FOUND)
+  message("-- Found Eigen version ${EIGEN_VERSION}: ${EIGEN_INCLUDE_DIRS}")
+endif (EIGEN_FOUND)
+include_directories(${EIGEN_INCLUDE_DIRS})
 
 message("OPENCV: ${OpenCV_VERSION}")
 #link_directories(/usr/lib64 ${PCL_LIBRARY_DIRS})

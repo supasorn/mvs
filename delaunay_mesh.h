@@ -11,7 +11,10 @@
 #include <CGAL/Triangulation_3.h>
 #include <CGAL/Triangulation_cell_base_with_info_3.h>
 #include <CGAL/Triangulation_vertex_base_with_info_3.h>
+#include <eigen3/Eigen/Dense>
 #include <set>
+#include <sys/time.h>
+#include <time.h>
 
 #include "maxflow/v2_adjacency_list/graph.h"
 // This class is used to perform mesh extraction. The input is a set of point cloud.
@@ -108,6 +111,7 @@ public:
   void ExtractSurface(std::vector<Point> &camera);
   void getIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
   int IsInsideSurface(int id);
+  void SaveObj(std::string name);
 
   Delaunay d;
   Tree tree;
@@ -119,8 +123,8 @@ private:
   // If a new vertex is closer than merge_threshold to an existing vertex, 
   // merge the two vertices. Otherwise, add the new vertex into Delaunay.
   // TODO(supasorn): make a setter or option for this.
-  //double merge_threshold = 0.00001;
-  double merge_threshold = 0.00005;
+  double merge_threshold = 0.00001;
+  //double merge_threshold = 0.00005;
   //double merge_threshold = 0.000001;
 
   std::vector<Graph::node_id> nodes;
