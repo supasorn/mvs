@@ -1,5 +1,43 @@
 #include "delaunay_mesh.h"
 
+std::map<std::string, double> ticmap;
+std::map<std::string, double> ticamap; // accumulate
+double timestamp() {
+  timeval start; 
+  gettimeofday(&start, NULL);
+  return ((start.tv_sec) + start.tv_usec/1000000.0);
+}
+
+void tic(std::string name) {
+  ticmap[name] = timestamp();
+}
+
+double toc(std::string name) {
+  if (ticmap.find(name) != ticmap.end()) {
+    double ret = timestamp() - ticmap[name];
+    printf("Time %s: %f\n", name.c_str(), ret);
+    return ret;
+  }
+  return -1;
+}
+
+void toca(std::string name) {
+  if (ticmap.find(name) != ticmap.end()) {
+    if (ticamap.find(name) == ticamap.end())
+      ticamap[name] = timestamp() - ticmap[name];
+    else
+      ticamap[name] += timestamp() - ticmap[name];
+  }
+}
+
+void tocaList() {
+  printf("Profiling\n");
+  for (std::map<std::string, double>::iterator i = ticamap.begin(); i != ticamap.end(); i++) {
+    printf("  %s : %f\n", i->first.c_str(), i->second);
+  }
+}
+
+
 
 void DelaunayMesh::AddPoint(const DelaunayMesh::DPoint &p, const DelaunayMesh::VertexInfo &vi) {
   auto v = d.nearest_vertex(p);
@@ -108,12 +146,15 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   KSC::Ray_3 ray_query(camera, point);
   auto toCamera = camera - point;
 
+  tic("AABB");
   std::list<IntersectReturn> inters;
   tree.all_intersections(ray_query, std::back_inserter(inters));
+  toca("AABB");
 
   const FacetAndNormal* minFacet[2] = {0, 0};
   double minVal[2] = {1e10, 1e10};
   int id[2];
+  tic("Add");
   for (auto &inter: inters) {
     // Only retrieve point intersection here because segment intersection
     // always has triangle's normal perpedicular to the ray.
@@ -139,6 +180,7 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
       }
     } 
   }
+  toca("Add");
 
   for (int i = 0; i < 2; i++) {
     if (minFacet[i]) {
@@ -198,11 +240,6 @@ int DelaunayMesh::IsInsideSurface(int id) {
   return g->what_segment(nodes[id]) == Graph::SINK;
 }
 
-double timestamp() {
-  timeval start; 
-  gettimeofday(&start, NULL);
-  return ((start.tv_sec) + start.tv_usec/1000000.0);
-}
 
 void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   BuildAABBTree();
@@ -225,9 +262,9 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   for (auto it = d.finite_vertices_begin(); it != d.finite_vertices_end(); it++, vit++) 
     *vit = it;
 
-  //LOG(INFO) << "Constructing Graph\n";
+  printf("Constructing Graph\n");
   printf("  Surface Visibility ... "); fflush(stdout);
-#pragma omp parallel for
+//#pragma omp parallel for
   for (int i = 0; i < vs.size(); i++) {
     auto p = vs[i]->point();
     std::set<int> &cams = vs[i]->info().cams;
@@ -256,6 +293,7 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
     AddCostBinary(id[0], id[1], surfaceQuality, surfaceQuality);
   }
   printf("Done %f\n", timestamp() - t);
+  tocaList();
 
   for (int i = 0; i < nodes.size(); i++) {
     for (auto const &k : cost_binary[i]) {

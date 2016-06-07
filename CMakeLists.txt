@@ -76,4 +76,4 @@ add_library (raster ../research/utils/raster.cpp)
 #target_link_libraries (generatefeature ceres utilities libviz ply.so) 
 
 add_executable (cgal cgal.cpp delaunay_mesh.cc)
-target_link_libraries (cgal ceres libviz maxflow ${EXTRA_LIBS} ${OpenCV_LIBS} glog) 
+target_link_libraries (cgal ceres libviz maxflow ${EXTRA_LIBS} ${OpenCV_LIBS} glog gflags) 

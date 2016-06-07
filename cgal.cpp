@@ -13,11 +13,14 @@
 #include "delaunay_mesh.h"
 #include "viz.h"
 #include "maxflow/v2_adjacency_list/graph.h"
-#include "gflags/gflags.h"
-#include "glog/logging.h"
+//#include "gflags/gflags.h"
+//#include "glog/logging.h"
 
 DelaunayMesh dm;
 using namespace std;
+
+//#include <gflags/gflags.h>
+//using namespace gflags;
 
 typedef DelaunayMesh::DPoint DPoint;
 typedef DelaunayMesh::Cell_handle Cell_handle;
@@ -39,6 +42,7 @@ typedef DelaunayMesh::Tree::Intersection_and_primitive_id<DelaunayMesh::KSC::Ray
 vector<KPoint> camera;
 
 vector<int> nodesOut;
+DEFINE_string(guy, "George_W_Bush", "a");
 
 float rand1(float c = 1) {
   return c * (2.0 * rand() / RAND_MAX - 1);
@@ -270,7 +274,7 @@ void test3() {
     fread(c, sizeof(float), 3, fi);
     fread(vc, sizeof(int), 2, fi);
 
-    //if (i % 100 < 50) continue;
+    if (i % 100 < 70) continue;
 
     dm.AddPoint(DPoint(p[0], p[1], p[2]), VertexInfo(vc[0], vc[1]));
 
@@ -330,8 +334,10 @@ void testGraph() {
 	delete g;
 }
 int main(int argc, char** argv) {
+  VLOG (1) << "eys";
   google::ParseCommandLineFlags(&argc, &argv, false);
   google::InitGoogleLogging(argv[0]);
+  printf("%s\n", FLAGS_guy.c_str());
   //testGraph();
   //test2();
   test3();
