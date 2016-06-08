@@ -235,19 +235,6 @@ void test2() {
 
 
 
-void ExtractSurface() {
-  for (auto &triangle : dm.triangles) {
-    int id[2];
-    dm.GetIncidentTetrahedrons(&triangle, id[0], id[1]);
-    if (nodesOut[id[0]] != nodesOut[id[1]]) {
-      addFacet(triangle.f, nodesOut[id[0]]);
-    }
-  }
-  outObj();
-}
-
-
-
 
 void test3() {
   DelaunayMesh::Delaunay &d = dm.d;

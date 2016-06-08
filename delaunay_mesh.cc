@@ -1,5 +1,7 @@
 #include "delaunay_mesh.h"
 
+// *********    TO BE REMOVED     ***********
+// ********* Start Profiling code ***********
 std::map<std::string, double> ticmap;
 std::map<std::string, double> ticamap; // accumulate
 double timestamp() {
@@ -36,9 +38,10 @@ void tocaList() {
     printf("  %s : %f\n", i->first.c_str(), i->second);
   }
 }
+// ********* End Profiling code ***********
 
 
-
+// Adds depth point to the Delaunay.
 void DelaunayMesh::AddPoint(const DelaunayMesh::DPoint &p, const DelaunayMesh::VertexInfo &vi) {
   auto v = d.nearest_vertex(p);
   // Found a nearest vertex within merge_threshold distance.
@@ -56,7 +59,6 @@ void DelaunayMesh::AddPoint(const DelaunayMesh::DPoint &p, const DelaunayMesh::V
     auto v = d.insert(p);
     v->info() = vi;
   }
-
 }
 
 DelaunayMesh::FacetAndNormal::FacetAndNormal(Facet f) {
@@ -103,19 +105,26 @@ int DelaunayMesh::BuildAABBTree() {
   return triangles.size();
 }
 
-// Assigns IDs to all tetrahedrons after Delaunay is complete. Returns number of cells.
-int DelaunayMesh::AssignTetrahedronIds() {
+// Assigns IDs to all vertices and tetrahedrons after Delaunay is complete. Returns number of cells.
+void DelaunayMesh::AssignIds() {
   int idCount = 0;
   for (auto it = d.all_cells_begin(); it != d.all_cells_end(); it++) {
     it->info().id = idCount++;
   }
-  return idCount;
+
+  idCount = 0;
+  for (auto it = d.all_vertices_begin(); it != d.all_vertices_end(); it++) {
+    it->info().id = idCount++;
+  }
 }
 
-inline int DelaunayMesh::IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const DelaunayMesh::K::Vector_3 &b) {
+// Check if dot product between a and b > 0. It's a bit annoying because a and
+// b use different CGAL kernel, and a - b isn't overloaded in CGAL.
+inline int IsSameSide(DelaunayMesh::KSC::Vector_3 &a, const DelaunayMesh::K::Vector_3 &b) {
     return a.x() * b.x() + a.y() * b.y() + a.z() * b.z() > 0;
 }
 
+// Adds an edge for node id0 to source and sink.
 void DelaunayMesh::AddCostUnary(int id0, double src, double snk) {
   omp_set_lock(&lock[id0]);
   cost_unary[id0].first += src;
@@ -123,6 +132,7 @@ void DelaunayMesh::AddCostUnary(int id0, double src, double snk) {
   omp_unset_lock(&lock[id0]);
 }
 
+// Adds an edge from and to node id0 to id1 with cost0 and cost1 respectively.
 void DelaunayMesh::AddCostBinary(int id0, int id1, double cost0, double cost1) {
   omp_set_lock(&lock[id0]);
   if (cost_binary[id0].find(id1) == cost_binary[id0].end())
@@ -139,6 +149,7 @@ void DelaunayMesh::AddCostBinary(int id0, int id1, double cost0, double cost1) {
   omp_unset_lock(&lock[id1]);
 }
 
+// Adds a set of edges for the network flow for point and camera with cost.
 void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   typedef std::pair<const DelaunayMesh::FacetAndNormal*, double> sortedFacets; 
 
@@ -190,41 +201,51 @@ void DelaunayMesh::AssignCost(Point &point, Point &camera, double cost) {
   }
 }
 
+// Returns id0, and id1 of tetrahedra incident to facet f.
 void DelaunayMesh::GetIncidentTetrahedrons(const DelaunayMesh::FacetAndNormal *f, int &id0, int &id1) {
   id0 = f->f.first->info().id; 
   id1 = d.mirror_facet(f->f).first->info().id;
 }
 
+// Saves mesh to obj file.
 void DelaunayMesh::SaveObj(std::string name) {
-  std::vector<DPoint> _points;
-  std::vector<Eigen::Vector3i> _faces;
+  std::map<int, int> used;
+  std::vector<Vertex_handle> sorted;
+  std::vector<Eigen::Vector3i> faces;
+
   for (auto &triangle : triangles) {
     int id[2];
     GetIncidentTetrahedrons(&triangle, id[0], id[1]);
     if (IsInsideSurface(id[0]) != IsInsideSurface(id[1])) {
       auto &f = triangle.f;
-      int base = _points.size() + 1;
+      int sign = (f.second % 2) ^ IsInsideSurface(id[0]) ? 1 : -1;
+      faces.push_back(Eigen::Vector3i());
       for (int i = 1; i <= 3; i++) {
-        auto v = f.first->vertex((f.second + i) % 4)->point();
-        _points.push_back(v);
+        Vertex_handle vh = f.first->vertex((4 + f.second + i * sign) % 4);
+        int vid = vh->info().id;
+        if (used.find(vid) == used.end()) {
+          sorted.push_back(vh);
+          used[vid] = sorted.size();
+        }
+        faces.back()[i-1] = used[vid];
       }
-      if ((f.second % 2) ^ IsInsideSurface(id[0]))
-        _faces.push_back(Eigen::Vector3i(base, base+1, base+2));
-      else
-        _faces.push_back(Eigen::Vector3i(base, base+2, base+1));
-
     }
   }
+
   FILE *fo = fopen(name.c_str(), "w");
-  for (int i = 0; i < _points.size(); i++) {
-    fprintf(fo, "v %lf %lf %lf\n", _points[i][0], _points[i][1], _points[i][2]);
+  for (Vertex_handle &vh : sorted) {
+    auto &p = vh->point();
+    fprintf(fo, "v %lf %lf %lf\n", p.x(), p.y(), p.z());
   }
-  for (int i = 0; i < _faces.size(); i++) { 
-    fprintf(fo, "f %d %d %d\n", _faces[i][0], _faces[i][1], _faces[i][2]);
+
+  for (auto &face : faces) {
+    fprintf(fo, "f %d %d %d\n", face[0], face[1], face[2]);
   }
   fclose(fo);
 }
 
+// Returns the cosine angle between the facet with inward-facing normal and 
+// circimscribed sphere in the tetrahedron.
 double CosineOfCircumsphere(DelaunayMesh::Facet f, DelaunayMesh::K::Vector_3 &normal) {
   auto &ch = f.first;
   auto center = CGAL::circumcenter(ch->vertex(0)->point(), ch->vertex(1)->point(), ch->vertex(2)->point(), ch->vertex(3)->point());
@@ -236,14 +257,15 @@ double CosineOfCircumsphere(DelaunayMesh::Facet f, DelaunayMesh::K::Vector_3 &no
   return height / length;
 }
 
+// Returns true if tetrahedron with this id is inside the mesh.
 int DelaunayMesh::IsInsideSurface(int id) {
   return g->what_segment(nodes[id]) == Graph::SINK;
 }
 
-
+// Runs the main algorithm. Extract mesh surface given cameras' centers.
 void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   BuildAABBTree();
-  AssignTetrahedronIds();
+  AssignIds();
 
   nodes.resize(d.number_of_cells());
   cost_unary.resize(d.number_of_cells());
@@ -264,7 +286,8 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
 
   printf("Constructing Graph\n");
   printf("  Surface Visibility ... "); fflush(stdout);
-//#pragma omp parallel for
+
+#pragma omp parallel for
   for (int i = 0; i < vs.size(); i++) {
     auto p = vs[i]->point();
     std::set<int> &cams = vs[i]->info().cams;
@@ -283,14 +306,13 @@ void DelaunayMesh::ExtractSurface(std::vector<Point> &camera) {
   for (auto &triangle : triangles) {
     // Surface quality. Higher -> smoother.
     //double lambda = 0.5;
-    double lambda = 0;
-    double surfaceQuality = lambda * (1 - std::min(
+    double sq = surface_quality_lambda * (1 - std::min(
         CosineOfCircumsphere(triangle.f, triangle.n), 
         -CosineOfCircumsphere(d.mirror_facet(triangle.f), triangle.n)));
 
     int id[2];
     GetIncidentTetrahedrons(&triangle, id[0], id[1]);
-    AddCostBinary(id[0], id[1], surfaceQuality, surfaceQuality);
+    AddCostBinary(id[0], id[1], sq, sq);
   }
   printf("Done %f\n", timestamp() - t);
   tocaList();

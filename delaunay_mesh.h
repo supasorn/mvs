@@ -30,6 +30,7 @@ public:
   struct VertexInfo {
     std::set<int> cams;
     int n;
+    int id;
 
     VertexInfo() : n(1) {}
     VertexInfo(int cam0, int cam1) : n(1) { 
@@ -44,7 +45,8 @@ public:
     int id;
   };
 
-  // Could use Epick kernel, but Simple_cartesian is supposed to be fastest.
+  // Could use Exact_predicates_inexact_constructions_kernel for AABB, but 
+  // Simple_cartesian is supposed to be fastest.
   typedef CGAL::Simple_cartesian<double> KSC; 
   typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 
@@ -109,10 +111,13 @@ public:
   // Adds depth point to the Delaunay.
   void AddPoint(const Delaunay::Point &p, const VertexInfo &vi);
 
-  // Builds AABB tree for fast ray intersection. Return the number of triangles.
+  // Runs the main algorithm. Extract mesh surface given cameras' centers.
   void ExtractSurface(std::vector<Point> &camera);
-  void GetIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
+
+  // Returns true if tetrahedron with this id is inside the mesh.
   int IsInsideSurface(int id);
+
+  // Saves mesh to obj file.
   void SaveObj(std::string name);
 
   Delaunay d;
@@ -125,23 +130,42 @@ private:
   // If a new vertex is closer than merge_threshold to an existing vertex, 
   // merge the two vertices. Otherwise, add the new vertex into Delaunay.
   // TODO(supasorn): make a setter or option for this.
-  //double merge_threshold = 0.00001;
+  double merge_threshold = 0.00001;
   //double merge_threshold = 0.00005;
-  double merge_threshold = 0.0000001;
+  //double merge_threshold = 0.0000001;
+  //
+  double surface_quality_lambda = 10;
 
+  // Graph-cut nodes.
   std::vector<Graph::node_id> nodes;
   Graph *g;
 
+  // cost_binary[i][j] is the edge cost from node i to node j.
   std::vector<std::map<int, double> > cost_binary;
+
+  // cost_unary[i] = (src, sink) contains the edge costs from node i
+  // to source and sink.
   std::vector<std::pair<double, double> > cost_unary;
+
   std::vector<omp_lock_t> lock;
 
+  // Adds an edge for node id0 to source and sink.
   void AddCostUnary(int id0, double src, double snk);
+
+  // Adds an edge from and to node id0 and id1 with cost0 and cost1 respectively.
   void AddCostBinary(int id0, int id1, double cost0, double cost1);
-  inline int IsSameSide(KSC::Vector_3 &a, const K::Vector_3 &b);
+
+  // Adds a set of edges for the network flow for point and camera with cost.
   void AssignCost(Point &point, Point &camera, double cost); 
+
+  // Builds AABB tree for fast ray intersection. Return the number of triangles.
   int BuildAABBTree();
-  int AssignTetrahedronIds();
+
+  // Assigns IDs to all vertices and tetrahedrons after Delaunay is complete. Returns number of cells.
+  void AssignIds();
+
+  // Returns id0, and id1 of tetrahedra incident to facet f.
+  void GetIncidentTetrahedrons(const FacetAndNormal *f, int &id0, int &id1);
 };
 
 #endif
